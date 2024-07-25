@@ -5,5 +5,16 @@
 *.jpg
 *.png
 *.pdf
+*.stp
+*.swxm
+*.bmp
+*.wsxm
+*.pdn
 
 Papers/
+Calculations/
+Filtering/
+STM Data/
+XYZData/
+freqout/
+output/
