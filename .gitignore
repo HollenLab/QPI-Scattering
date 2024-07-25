@@ -1,2 +1,9 @@
 # Ignore raw data files
 *.sm4
+*.csv
+*.pkl
+*.jpg
+*.png
+*.pdf
+
+Papers/
