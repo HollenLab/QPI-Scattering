@@ -3,7 +3,7 @@ import sys
 import glob
 import subprocess
 
-rname = "ab_horizontal"
+rname = "bsublattice_horizontal"
 
 truep = r"/mnt/c/Users/ander/OneDrive/Documents/GitHub/QPI-Scattering/TBCalcs/"
 dfolder = r"Calculations/" + rname + "/"
