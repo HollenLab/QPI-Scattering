@@ -24,7 +24,7 @@ run_item = args.run_item
 dfile = "continous_ldos.csv"
 
 # Load in data
-truep = r"/mnt/c/Users/ander/OneDrive/Documents/GitHub/QPI-Scattering/TBCalcs/"
+truep = r"/home/cmp/Documents/Github/QPI-Scattering/TBCalcs/"
 fpath = truep + r"Calculations/"+run_set+"/"+run_item+"/"+dfile
 df=pd.read_csv(fpath)
 
@@ -38,8 +38,9 @@ if not os.path.exists(opath):
 opath1 = opath + '/axis1'
 opath2 = opath + '/axis2'
 opath3 = opath + '/axis3'
+opath4 = opath + '/unfiltered'
 
-for p in [opath1, opath2, opath3]:
+for p in [opath1, opath2, opath3, opath4]:
     if not os.path.exists(p):
         os.makedirs(p)
 
@@ -88,7 +89,8 @@ ax.set_ylabel('y (nm^-1)')
 ax.set_xlim(-40, 40)
 ax.set_ylim(-40, 40)
 
-#fig.savefig('kspace.png')
+# Saving Unfiltered
+fig.savefig(opath4 + '/kspace'+ run_item + '.png')
 
 ### FILTERING ###
 # Periodic 1D Hann Function

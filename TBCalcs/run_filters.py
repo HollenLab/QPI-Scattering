@@ -3,12 +3,12 @@ import sys
 import glob
 import subprocess
 
-rname = "bsublattice_horizontal"
+rname = "a_sublattice"
 
-truep = r"/mnt/c/Users/ander/OneDrive/Documents/GitHub/QPI-Scattering/TBCalcs/"
+truep = r"/home/cmp/Documents/Github/QPI-Scattering/TBCalcs/"
 dfolder = r"Calculations/" + rname + "/"
 
-pypath = "/mnt/c/Users/ander/OneDrive/Documents/GitHub/QPI-Scattering/TBCalcs/filterk.py"
+pypath = "/home/cmp/Documents/Github/QPI-Scattering/TBCalcs/filterk.py"
 
 folds = [d for d in glob.glob(truep + dfolder + '/*') if os.path.isdir(d)]
 basenames = [os.path.basename(fs) for fs in folds]
