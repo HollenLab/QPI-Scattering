@@ -1,0 +1,17 @@
+{
+    "tasks": [
+        {
+            "label": "build with GSL",
+            "type": "shell",
+            "command": "gcc",
+            "args": [
+                "${file}",
+                "-lgsl",
+                "-lgslcblas",
+                "-lm",
+                "-o",
+                "${fileDirname}/${fileBasenameNoExtension}"
+            ]
+        }
+    ]
+}

@@ -34,7 +34,7 @@ os.makedirs(outdir, exist_ok=True)
 
 
 # Relevant Constants and Parameter
-V0 = 1 # eV
+V0 = 1e3 # eV
 VF = 906091185689731.9 # nm/s
 a = 0.24595 #nm
 nb = int(sep_num)
