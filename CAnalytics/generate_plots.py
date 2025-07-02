@@ -25,11 +25,11 @@ mask2 = ((X-(sep * a)) ** 2 + Y ** 2) <= maskr**2
 mask = mask1 | mask2
 
 Z_masked = df.values
-Z_masked[mask] = 0
+Z_masked[mask] = 1e-9
 
 fig, ax = plt.subplots(figsize=(8, 8))
 
-pc = ax.pcolormesh(xlin, ylin, Z_masked)
+pc = ax.pcolormesh(xlin, ylin, Z_masked, cmap='seismic')
 fig.colorbar(pc)
 
 ax.set_aspect('equal')
