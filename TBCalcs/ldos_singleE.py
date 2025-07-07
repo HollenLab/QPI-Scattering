@@ -25,7 +25,7 @@ parser.add_argument("energy", help="energy in eV to calculate LDOS at")
 args = parser.parse_args()
 
 sep_num = args.sep
-outdir = args.outdir
+outdir = args.outdir + "/" + str(args.sep)
 calc_energy = float(args.energy)
 
 print("Caluclating sep=" + args.sep + " and energy = " + args.energy)

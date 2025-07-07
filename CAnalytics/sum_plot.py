@@ -45,7 +45,7 @@ def createPlot(folderdir):
     X, Y = np.meshgrid(xlin, ylin)
 
     # We create a mask because our functions blow up at r -> zero
-    maskr = 0.25
+    maskr = 0.5
     mask1 = ((X+(sep * a)) ** 2 + Y ** 2) <= maskr**2
     mask2 = ((X-(sep * a)) ** 2 + Y ** 2) <= maskr**2
 
@@ -54,9 +54,12 @@ def createPlot(folderdir):
     Z_masked = df.values
     Z_masked[mask] = 1e-9
 
-    fig, ax = plt.subplots(figsize=(8, 8))
+    ZR2 = df.values * (0.5 * ((X+sep*a) ** 2 + Y ** 2)+0.5 * ((X-sep*a) ** 2 + Y ** 2))
 
-    pc = ax.pcolormesh(xlin, ylin, Z_masked, cmap='seismic')
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    pc = ax.pcolormesh(xlin, ylin, ZR2)
+    ax.set_title("sep" + str(sepnum) + " times shifted r^2")
     fig.colorbar(pc)
 
     ax.set_aspect('equal')
@@ -64,7 +67,7 @@ def createPlot(folderdir):
     ax.set_ylabel('y (nm)')
 
     fig.savefig(folderdir + "/0outplotSE.png")
-    fig.savefig("/home/cmp/Documents/Github/QPI-Scattering/CAnalytics/output/plots/sep" + str(sepnum)  + "a-outplotSE.png")
+    fig.savefig("/home/cmp/Documents/Github/QPI-Scattering/CAnalytics/output/plots/sep" + str(sepnum)  + "a-outplot.png")
 
     plt.close()
 

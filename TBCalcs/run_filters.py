@@ -3,7 +3,7 @@ import sys
 import glob
 import subprocess
 
-rname = "a_sublattice"
+rname = "asub0d2ev"
 
 truep = r"/home/cmp/Documents/Github/QPI-Scattering/TBCalcs/"
 dfolder = r"Calculations/" + rname + "/"

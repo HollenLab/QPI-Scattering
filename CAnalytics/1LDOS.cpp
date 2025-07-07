@@ -34,7 +34,7 @@ double *output = new double[nx*ny];
 const float V0 = 1; // eV
 const double VF = 9.060911856897319e14; // nm/s 
 const double a = 0.24595; // nm
-const double acc = 0.142; //nm
+const double acc = 0.142;
 const float hop = -2.8; // eV
 const double Hbar = 6.582119569e-16; // eV * s
 const double VFH = VF * Hbar;
@@ -42,7 +42,7 @@ const double VFH = VF * Hbar;
 const double K0 = (4 * M_PI)/(3*sqrt(3)*acc);
 
 // Locations of Defects
-int sep = 20; // nm separation constant
+int sep = 0; // nm separation constant
 double R1x = -sep * a;
 double R1y = 0;
 double R2x = sep *a;
@@ -223,140 +223,16 @@ gsl_complex ordertwo(double w, GFParams p1, GFParams p2, GFParams p3){
     return gsl_complex_mul(GF(w, p1.Kx, p1.Ky, p1.Rx, p1.Ry, p1.sindex), orderone(w, p2, p3));
 }
 
-gsl_complex Rfrac(double w, double K1x, double K1y, double K2x, double K2y){
-
-    double d12x = R1x - R2x;
-    double d12y = R1y - R2y;
-
-    GFParams p1 = {K1x, K1y, d12x, d12y, "AA"};
-    GFParams p2 = {K2x, K2y, -d12x, -d12y, "AA"};
-    GFParams p3 = {K1x, K1y, d12x, d12y, "AB"};
-    GFParams p4 = {K2x, K2y, -d12x, -d12y, "BA"};
-
-    gsl_complex tnum = telem(0.2);
-    gsl_complex tnum2 = gsl_complex_mul(tnum, tnum);
-
-    gsl_complex add4 = gsl_complex_mul(tnum2, gsl_complex_add(orderone(w, p1, p2), orderone(w, p3, p4)));
-    gsl_complex denom = gsl_complex_add(gsl_complex_rect(1, 0), gsl_complex_mul(gsl_complex_rect(-1, 0), add4));
-
-    return gsl_complex_div(gsl_complex_rect(1, 0), denom);
-}
 
 double f(double w, double x, double y, vScheme vs){
+    double C = -2 * pow(w, 2)/(pow(VFH, 4)*16);
 
-    double dR1x = x-R1x;
-    double dR1y = y-R1y;
-    double dR2x = x - R2x;
-    double dR2y = y - R2y;
-    double d12x = R1x - R2x;
-    double d12y = R1y - R2y;
+    double thet = atan2(y, x);
+    double gamma = norm(x, y)*w/VFH;
+    double term1 = C*cos(dot(-2*K0, 0, x, y))*GSL_IMAG(gsl_complex_mul(gsl_complex_mul(telem(0.2), Hankel0(gamma)), Hankel0(gamma)));
+    double term2 = -C*cos(dot(-2*K0, 0, x, y)-2*thet)*GSL_IMAG(gsl_complex_mul(gsl_complex_mul(telem(0.2), Hankel1(gamma)), Hankel1(gamma)));
 
-    ///////////////////////////
-    //// First Order Terms ////
-    ///////////////////////////
-
-    ///////////////////////
-    // alpha tilde alpha //
-    ///////////////////////
-    GFParams p1 = {vs.Katx, vs.Katy, -dR1x, -dR1y, "AA"};
-    GFParams p2 = {vs.Kax, vs.Kay, dR1x, dR1y, "AA"};
-    gsl_complex term1 = orderone(w, p1, p2);
-
-    p1 = {vs.Katx, vs.Katy, -dR1x, -dR1y, "AB"};
-    p2 = {vs.Kax, vs.Kay, dR1x, dR1y, "BA"};
-    gsl_complex term2 = orderone(w, p1, p2);
-
-    /////////////////////
-    // beta tilde beta //
-    /////////////////////
-    p1 = {vs.Kbtx, vs.Kbty, -dR2x, -dR2y, "AA"};
-    p2 = {vs.Kbx, vs.Kby, dR2x, dR2y, "AA"};
-    gsl_complex term3 = orderone(w, p1, p2);
-
-    p1 = {vs.Kbtx, vs.Kbty, -dR2x, -dR2y, "AB"};
-    p2 = {vs.Kbx, vs.Kby, dR2x, dR2y, "BA"};
-    gsl_complex term4 = orderone(w, p1, p2);
-
-    gsl_complex pfo1 = gsl_complex_mul(Rfrac(w, vs.Kgx, vs.Kgy, vs.Kgtx, vs.Kgty), telem(w));
-    gsl_complex term_order_one = gsl_complex_add(gsl_complex_add(gsl_complex_add(term4, term3), term2), term1);
-    gsl_complex cp1 = gsl_complex_mul(pfo1, term_order_one);
-
-    ////////////////////////////
-    //// Second Order Terms ////
-    ////////////////////////////
-
-    /////////////
-    // gt at b //
-    /////////////
-    p1 = {vs.Kgtx, vs.Kgty, -d12x, -d12y, "AA"};
-    p2 = {vs.Katx, vs.Katy, -dR1x, -dR1y, "AA"};
-    GFParams p3 = {vs.Kbx, vs.Kby, dR2x, dR2y, "AA"};
-    gsl_complex term5 = ordertwo(w, p1, p2, p3);
-
-    p1 = {vs.Kgtx, vs.Kgty, -d12x, -d12y, "AA"};
-    p2 = {vs.Katx, vs.Katy, -dR1x, -dR1y, "AB"};
-    p3 = {vs.Kbx, vs.Kby, dR2x, dR2y, "BA"};
-    gsl_complex term6 = ordertwo(w, p1, p2, p3);
-    
-    /////////////
-    // g bt a //
-    /////////////
-    p1 = {vs.Kgx, vs.Kgy, d12x, d12y, "AA"};
-    p2 = {vs.Kbtx, vs.Kbty, -dR2x, -dR2y, "AA"};
-    p3 = {vs.Kax, vs.Kay, dR1x, dR1y, "AA"};
-    gsl_complex term7 = ordertwo(w, p1, p2, p3);
-
-    p1 = {vs.Kgx, vs.Kgy, d12x, d12y, "AA"};
-    p2 = {vs.Kbtx, vs.Kbty, -dR2x, -dR2y, "AB"};
-    p3 = {vs.Kax, vs.Kay, dR1x, dR1y, "BA"};
-    gsl_complex term8 = ordertwo(w, p1, p2, p3);
-
-    gsl_complex pfo2 = gsl_complex_mul(pfo1, telem(w));
-    gsl_complex term_order_two = gsl_complex_add(gsl_complex_add(gsl_complex_add(term8, term7), term6), term5);
-    gsl_complex cp2 = gsl_complex_mul(pfo2, term_order_two);
-
-    /////////////////////////////
-    // Appended 2nd Order Terms//
-    /////////////////////////////
-    /////////////
-    // gt at b //
-    /////////////
-    p1 = {vs.Kgtx, vs.Kgty, -d12x, -d12y, "AB"};
-    p2 = {vs.Katx, vs.Katy, -dR1x, -dR1y, "BA"};
-    p3 = {vs.Kbx, vs.Kby, dR2x, dR2y, "AA"};
-    gsl_complex term9 = ordertwo(w, p1, p2, p3);
-
-
-    p1 = {vs.Kgtx, vs.Kgty, -d12x, -d12y, "AB"};
-    p2 = {vs.Katx, vs.Katy, -dR1x, -dR1y, "BB"};
-    p3 = {vs.Kbx, vs.Kby, dR2x, dR2y, "BA"};
-    gsl_complex term10 = ordertwo(w, p1, p2, p3);
-
-    /////////////
-    // g bt a //
-    /////////////
-    p1 = {vs.Kgx, vs.Kgy, d12x, d12y, "AB"};
-    p2 = {vs.Kbtx, vs.Kbty, -dR2x, -dR2y, "BA"};
-    p3 = {vs.Kax, vs.Kay, dR1x, dR1y, "AA"};
-    gsl_complex term11 = ordertwo(w, p1, p2, p3);
-
-
-    p1 = {vs.Kgx, vs.Kgy, d12x, d12y, "AB"};
-    p2 = {vs.Kbtx, vs.Kbty, -dR2x, -dR2y, "BB"};
-    p3 = {vs.Kax, vs.Kay, dR1x, dR1y, "BA"};
-    gsl_complex term12 = ordertwo(w, p1, p2, p3);
-
-    gsl_complex term_order_two_extra = gsl_complex_add(gsl_complex_add(gsl_complex_add(term12, term11), term10), term9);
-    gsl_complex cp3 = gsl_complex_mul(pfo2, term_order_two_extra);
-
-
-    return -1*GSL_IMAG(gsl_complex_add(gsl_complex_add(cp1, cp2), cp3));
-}
-
-double testf(double w, double x, double y){
-    GFParams p1 = {K0, 0, R1x-x, R1y-y, "AA"};
-
-    return GSL_IMAG(Rfrac(w, p1.Kx, p1.Ky, p1.Kx, p1.Ky));
+    return term1 + term2;
 }
 
 int calculateGrid(double* d_list){
@@ -375,7 +251,7 @@ int calculateGrid(double* d_list){
 }
 
 int save2file(double* d_list, string fname){
-    string fodir = "output/sep" + std::to_string(sep) + "a/";
+    string fodir = "output/single" + std::to_string(sep) + "a/";
     fs::create_directories(fodir);
     ofstream myfile (fodir + fname + "-ldos.tsv");
     if (myfile.is_open()){
@@ -405,77 +281,11 @@ int save2file(double* d_list, string fname){
     return 0;
 }
 
-// Valley Scheme: a, at, b, bt, g, gt
-int setVScheme(string valleys){
-    std::istringstream iss(valleys);
-    std::string token;
-
-    int i = 0;
-    while (iss >> token){
-        double Kx = 0;
-        double Ky = 0;
-        if (token == "K"){
-            Kx = K0;
-            Ky = 0;
-        }
-        else if (token == "P"){
-            Kx = -K0;
-            Ky = 0;
-        }
-        switch(i){
-            case 0: vs1.Kax = Kx; vs1.Kay = Ky; break;
-            case 1: vs1.Katx = Kx; vs1.Katy = Ky; break;
-            case 2: vs1.Kbx = Kx; vs1.Kby = Ky; break;
-            case 3: vs1.Kbtx = Kx; vs1.Kbty = Ky; break;
-            case 4: vs1.Kgx = Kx; vs1.Kgy = Ky; break;
-            case 5: vs1.Kgtx = Kx; vs1.Kgty = Ky; break;
-            default: std::cerr << "Too many tokens!"; break;
-        }
-
-        i++;
-    }
-
-    return 0;
-}
-
-int readRun(){
-
-    std::cout << "Calculating for " << sep << "u\n";
-
-    std::ifstream infile("combinations.txt");
-
-    if(!infile){
-        std::cerr << "Failed to open file.\n";
-    }
-
-    string line;
-    while (std::getline(infile, line)){
-        std::cout << "Calculating for " << line << "...\n";
-        setVScheme(line);
-        calculateGrid(output);
-        save2file(output, line);
-    }
-
-    return 0;
-}
-
-int bFromSep(int sep){
-
-    if (sep % 2 !=0){
-        return int((sep+1)/2);
-    }
-    else{
-        return 0;
-    }
-}
 
 int main()
 {
-    for (int i = 0; i < 10; i++){
-        int bs = bFromSep(2*i + 1);
-        updateSep(bs);
-        readRun();
-    }
-     
+    string fname = "onedef";
+    calculateGrid(output);
+    save2file(output, fname);
     return 0;
 }
