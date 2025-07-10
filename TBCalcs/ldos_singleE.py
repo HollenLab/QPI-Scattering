@@ -54,6 +54,7 @@ h = at/2 * 3/np.sqrt(3)
 n = int(sep_num)
 
 # in y component -at/2 for A sublattice and +at/2 for B sublattice
+"""
 if (n > 0):
   ## For two defects horizontal
   model = pb.Model(graphene.monolayer(), 
@@ -71,6 +72,20 @@ else:
    # no defect
   model = pb.Model(graphene.monolayer(), 
                  pb.rectangle(50, 50))
+"""
+
+def pv(x, y, sigma):
+  return 1/((sigma ** 2) * 2 * np.pi) * np.exp(-(x ** 2 + y ** 2) / (2*(sigma**2)))
+
+@pb.onsite_energy_modifier
+def potential(x, y):
+  return pv(x-(n*at*np.tan(np.pi/3)), y+at/2, 1e-1) + pv(x+(n*at*np.tan(np.pi/3)), y+at/2, 1e-1)
+
+  
+model = pb.Model(graphene.monolayer(), 
+                 pb.rectangle(50, 50), 
+                 potential)
+
 # Lattice Plot
 model.plot()
 plt.xlim(-7, 7)

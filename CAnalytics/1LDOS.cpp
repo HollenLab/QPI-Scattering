@@ -21,25 +21,34 @@ namespace fs = std::filesystem;
 static int nx = 1001;
 static int ny = 1001;
 
-static double dx = 0.02;
-static double dy = 0.02;
-
 static double shift_x = 10;
 static double shift_y = 10;
+
+static double dx = (2*shift_x)/(nx-1);
+static double dy = (2*shift_y)/(ny-1);
 
 // Initalize Array
 double *output = new double[nx*ny]; 
 //////////////////////////////////////////
 // Physics Parameters //
-const float V0 = 1; // eV
+const double V0 = 1; // eV
 const double VF = 9.060911856897319e14; // nm/s 
 const double a = 0.24595; // nm
-const double acc = 0.142;
-const float hop = -2.8; // eV
+const double acc = 0.142; // nm
+const double hop = -2.8; // eV
 const double Hbar = 6.582119569e-16; // eV * s
 const double VFH = VF * Hbar;
 
 const double K0 = (4 * M_PI)/(3*sqrt(3)*acc);
+
+// Rotate by 60 degrees
+double K1x = 0.5 * K0;
+double K1y = sqrt(3)/2 * K0;
+
+// Rotate by 120 degrees
+double K2x = -0.5 * K0;
+double K2y = sqrt(3)/2 * K0;
+
 
 // Locations of Defects
 int sep = 0; // nm separation constant
@@ -96,7 +105,7 @@ int updateSep(int sepnum){
 
 // coord from Index
 double cFI(int i, double dix, double shift){
-    return i * dix - shift;
+    return (i * dix) - shift;
 }
 
 //////////////////////////
@@ -135,9 +144,11 @@ gsl_complex Hankel1(double x){
     }
     return gsl_complex_rect(gsl_sf_bessel_J1(x), gsl_sf_bessel_Y1(x));
 }
+// Make More Sophisticated
 int vIndex(double Kx, double Ky){
     int rval = 0;
-    if (Kx > 0){
+
+    if (Kx == K0 || (Kx == K2x && Ky == K2y) || (Kx == -K1x && Ky == -K1y)){
         rval = 1;
     }
     else {
@@ -224,17 +235,30 @@ gsl_complex ordertwo(double w, GFParams p1, GFParams p2, GFParams p3){
 }
 
 
-double f(double w, double x, double y, vScheme vs){
+double f(double w, double x, double y, double Kx, double Ky){
     double C = -2 * pow(w, 2)/(pow(VFH, 4)*16);
 
     double thet = atan2(y, x);
     double gamma = norm(x, y)*w/VFH;
-    double term1 = C*cos(dot(-2*K0, 0, x, y))*GSL_IMAG(gsl_complex_mul(gsl_complex_mul(telem(0.2), Hankel0(gamma)), Hankel0(gamma)));
-    double term2 = -C*cos(dot(-2*K0, 0, x, y)-2*thet)*GSL_IMAG(gsl_complex_mul(gsl_complex_mul(telem(0.2), Hankel1(gamma)), Hankel1(gamma)));
+    double term1 = C*cos(dot(-2*Kx, -2*Ky, x, y))*GSL_IMAG(gsl_complex_mul(gsl_complex_mul(telem(0.2), Hankel0(gamma)), Hankel0(gamma)));
+    double term2 = -C*cos(dot(-2*Kx, -2*Ky, x, y)-2*thet)*GSL_IMAG(gsl_complex_mul(gsl_complex_mul(telem(0.2), Hankel1(gamma)), Hankel1(gamma)));
 
     return term1 + term2;
 }
 
+double pristineLDOS(double w, double x, double y){
+    double val = GSL_IMAG(GF(w, K0, 0, x, y, "AA")) + GSL_IMAG(GF(w, K0, 0, x, y, "BB")) + \
+    GSL_IMAG(GF(w, K1x, K1y, x, y, "AA")) + GSL_IMAG(GF(w, K1x, K1y, x, y, "BB")) +\
+     GSL_IMAG(GF(w, K2x, K2y, x, y, "AA")) + GSL_IMAG(GF(w, K2x, K2y, x, y, "BB"));
+
+    double Ival = GSL_IMAG(GF(w, -K0, 0, x, y, "AA")) + GSL_IMAG(GF(w, -K0, 0, x, y, "BB")) + \
+    GSL_IMAG(GF(w, -K1x, -K1y, x, y, "AA")) + GSL_IMAG(GF(w, -K1x, -K1y, x, y, "BB")) +\
+     GSL_IMAG(GF(w, -K2x, -K2y, x, y, "AA")) + GSL_IMAG(GF(w, -K2x, -K2y, x, y, "BB"));
+
+    return -1/M_PI *(val + Ival);
+}
+
+//double w, double Kx, double Ky, double Rx, double Ry, string sindex
 int calculateGrid(double* d_list){
     omp_set_num_threads(THREAD_NUM); // set number of threads in "parallel" blocks
     #pragma omp parallel
@@ -242,7 +266,11 @@ int calculateGrid(double* d_list){
         #pragma omp for
         for (int i = 0; i < nx; i++){
             for (int j = 0; j < ny; j++){
-                d_list[j*nx + i] = f(0.2, cFI(i, dx, shift_x), cFI(j, dy, shift_y), vs1);
+                //d_list[j*nx + i] = f(0.2, cFI(i, dx, shift_x), cFI(j, dy, shift_y), K0, 0) +\
+                //f(0.2, cFI(i, dx, shift_x), cFI(j, dy, shift_y), K1x, K1y) + f(0.2, cFI(i, dx, shift_x), cFI(j, dy, shift_y), K2x, K2y) +\
+                //pristineLDOS(0.2, cFI(i, dx, shift_x), cFI(j, dy, shift_y));
+
+                d_list[j*nx + i] = pristineLDOS(0.2, cFI(i, dx, shift_x), cFI(j, dy, shift_y));
             }
         }
     }

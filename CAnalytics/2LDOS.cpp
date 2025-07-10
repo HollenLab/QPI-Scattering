@@ -14,7 +14,7 @@
 using namespace std;
 namespace fs = std::filesystem;
 
-////////////////////////////////////////
+//////////////////////
 // Grid Parameters //
 /////////////////////
 
@@ -29,17 +29,27 @@ static double shift_y = 10;
 
 // Initalize Array
 double *output = new double[nx*ny]; 
-//////////////////////////////////////////
+
+////////////////////////
 // Physics Parameters //
-const float V0 = 1; // eV
+///////////////////////
+const double V0 = 1; // eV
 const double VF = 9.060911856897319e14; // nm/s 
 const double a = 0.24595; // nm
 const double acc = 0.142; //nm
-const float hop = -2.8; // eV
+const double hop = -2.8; // eV
 const double Hbar = 6.582119569e-16; // eV * s
 const double VFH = VF * Hbar;
 
 const double K0 = (4 * M_PI)/(3*sqrt(3)*acc);
+
+// Rotate by 60 degrees
+double K1x = 0.5 * K0;
+double K1y = sqrt(3)/2 * K0;
+
+// Rotate by 120 degrees
+double K2x = -0.5 * K0;
+double K2y = sqrt(3)/2 * K0;
 
 // Locations of Defects
 int sep = 20; // nm separation constant
@@ -80,9 +90,11 @@ struct vScheme{
 //const vScheme vs1 = {K0, 0, -K0, 0, K0, 0, -K0, 0, K0, 0, -K0, 0};
 vScheme vs1 = {K0, 0, K0, 0, K0, 0, K0, 0, K0, 0, K0, 0};
 
-
+// Change the separation and all the variables related to separation
 int updateSep(int sepnum){
 
+    // Separation is an integer related to number of unit cells in between the defect's location
+    // Two unit cells are seperated by the width of the graphene hexagon a_cc * tan(60)
     double h = acc * tan(M_PI/3);
 
     sep = sepnum; // nm separation constant
@@ -94,7 +106,9 @@ int updateSep(int sepnum){
     return 0;
 }
 
-// coord from Index
+// Maps the array's element index to coordinate position value
+// The shift determines the grid. i.e shift of 10 gives you a grid defined 
+// from -10nm to 10nm i.e a 20x20 nm grid with zero at the center.
 double cFI(int i, double dix, double shift){
     return i * dix - shift;
 }
@@ -135,9 +149,11 @@ gsl_complex Hankel1(double x){
     }
     return gsl_complex_rect(gsl_sf_bessel_J1(x), gsl_sf_bessel_Y1(x));
 }
+// Tells you for a given K vector which valley you are located and assigns either 1 or -1
 int vIndex(double Kx, double Ky){
     int rval = 0;
-    if (Kx > 0){
+
+    if (Kx == K0 || (Kx == K2x && Ky == K2y) || (Kx == -K1x && Ky == -K1y)){
         rval = 1;
     }
     else {
@@ -151,7 +167,8 @@ int vIndex(double Kx, double Ky){
 gsl_complex mbyI(gsl_complex z){
     return gsl_complex_rect(-GSL_IMAG(z), GSL_REAL(z));
 }
-// dindex: forward = 1 backward = -1
+
+// 2x2 Green's Function Matrix
 gsl_complex GF(double w, double Kx, double Ky, double Rx, double Ry, string sindex){
 
     gsl_complex rval = gsl_complex_rect(0, 0);
@@ -182,39 +199,18 @@ gsl_complex GF(double w, double Kx, double Ky, double Rx, double Ry, string sind
 
 }
 
-// This one did not have proper units. i.e smoothed Green's function vs lattice greens funciton.
-// Check this expression, not entirely confident
-//gsl_complex G0AA(double w){
-//    return gsl_complex_rect(w/(sqrt(3)*M_PI*pow(hop, 2)) * log(pow(w, 2)/(sqrt(3)*M_PI*pow(hop, 2))), -abs(w)/(sqrt(3)*pow(hop, 2)));
-//}
+// Onsite Green's Function Matrix Element r->0
 gsl_complex G0AA(double w){
-    //double real_part = (M_PI * w)/(pow(VF*Hbar, 2)) * log(pow(w, 2)/(pow((3/2)*hop, 2)-pow(w, 2)));
-    double real_part = (M_PI * w)/(pow(VF*Hbar, 2)) * log(pow(w, 2)/(pow(hop, 2)));
+    double real_part = (M_PI * w)/(pow(VF*Hbar, 2)) * log(pow(w, 2)/(pow(hop, 2) - pow(w, 2)));
     double imag_part = -(pow(M_PI, 2)*abs(w))/(pow(VF*Hbar, 2));
 
     return gsl_complex_rect(real_part, imag_part);
 }
-
+// Single T Matrix Element
 gsl_complex telem(double w){
     return gsl_complex_div(gsl_complex_rect(V0, 0), gsl_complex_add_real(gsl_complex_mul_real(G0AA(w), -V0), 1));
 }
-
-/*
-gsl_complex Rfrac(double w, double K1x, double K1y, double K2x, double K2y){
-    GFParams p1 = {K1x, K1y, R1x-R2x, R1y-R2y, "AA"};
-    GFParams p2 = {K2x, K2y, -(R1x-R2x), -(R1y-R2y), "AA"};
-
-    gsl_complex tnum = telem(0.2);
-    gsl_complex tnum2 = gsl_complex_mul(tnum, tnum);
-
-    gsl_complex denom = gsl_complex_add_real(gsl_complex_mul(gsl_complex_negative(tnum2),gsl_complex_mul(GF(w, p1.Kx, p1.Ky, p1.Rx, p1.Ry, p1.sindex),\
-    GF(w, p2.Kx, p2.Ky, p2.Rx, p2.Ry, p2.sindex))), 1);
-
-    return gsl_complex_div(gsl_complex_rect(1, 0), denom);
-}
-*/
-
-
+// Multiplying GF's Together
 gsl_complex orderone(double w, GFParams p1, GFParams p2){
     return gsl_complex_mul(GF(w, p1.Kx, p1.Ky, p1.Rx, p1.Ry, p1.sindex), GF(w, p2.Kx, p2.Ky, p2.Rx, p2.Ry, p2.sindex));
 }
@@ -222,7 +218,7 @@ gsl_complex orderone(double w, GFParams p1, GFParams p2){
 gsl_complex ordertwo(double w, GFParams p1, GFParams p2, GFParams p3){
     return gsl_complex_mul(GF(w, p1.Kx, p1.Ky, p1.Rx, p1.Ry, p1.sindex), orderone(w, p2, p3));
 }
-
+// Condensed Geometric Series Term
 gsl_complex Rfrac(double w, double K1x, double K1y, double K2x, double K2y){
 
     double d12x = R1x - R2x;
@@ -242,6 +238,7 @@ gsl_complex Rfrac(double w, double K1x, double K1y, double K2x, double K2y){
     return gsl_complex_div(gsl_complex_rect(1, 0), denom);
 }
 
+// Caluclating and summing all the LDOS terms
 double f(double w, double x, double y, vScheme vs){
 
     double dR1x = x-R1x;
@@ -353,12 +350,7 @@ double f(double w, double x, double y, vScheme vs){
     return -1*GSL_IMAG(gsl_complex_add(gsl_complex_add(cp1, cp2), cp3));
 }
 
-double testf(double w, double x, double y){
-    GFParams p1 = {K0, 0, R1x-x, R1y-y, "AA"};
-
-    return GSL_IMAG(Rfrac(w, p1.Kx, p1.Ky, p1.Kx, p1.Ky));
-}
-
+// Evaluate Function over Grid
 int calculateGrid(double* d_list){
     omp_set_num_threads(THREAD_NUM); // set number of threads in "parallel" blocks
     #pragma omp parallel
@@ -374,6 +366,7 @@ int calculateGrid(double* d_list){
     return 0;
 }
 
+// Writeout to file
 int save2file(double* d_list, string fname){
     string fodir = "output/sep" + std::to_string(sep) + "a/";
     fs::create_directories(fodir);
@@ -405,6 +398,8 @@ int save2file(double* d_list, string fname){
     return 0;
 }
 
+// We use the GF for just one K point, so we need to assign each
+// propagator a valley
 // Valley Scheme: a, at, b, bt, g, gt
 int setVScheme(string valleys){
     std::istringstream iss(valleys);
@@ -438,6 +433,8 @@ int setVScheme(string valleys){
     return 0;
 }
 
+// We thorugh the file of all possible valley configurations (64)
+// and calculate the LDOS and then save at the end we sum them together.
 int readRun(){
 
     std::cout << "Calculating for " << sep << "u\n";
@@ -471,7 +468,7 @@ int bFromSep(int sep){
 
 int main()
 {
-    for (int i = 0; i < 10; i++){
+    for (int i = 10; i < 16; i++){
         int bs = bFromSep(2*i + 1);
         updateSep(bs);
         readRun();
