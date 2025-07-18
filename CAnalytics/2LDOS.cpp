@@ -6,6 +6,7 @@
 #include <gsl/gsl_sf_bessel.h>
 #include <gsl/gsl_complex.h>
 #include <gsl/gsl_complex_math.h>
+#include <gsl/gsl_integration.h>
 #include <sstream>
 #include <string>
 #include <filesystem>
@@ -18,14 +19,14 @@ namespace fs = std::filesystem;
 // Grid Parameters //
 /////////////////////
 
-static int nx = 1001;
-static int ny = 1001;
+static int nx = 601;
+static int ny = 601;
 
-static double dx = 0.02;
-static double dy = 0.02;
+static double shift_x = 6;
+static double shift_y = 6;
 
-static double shift_x = 10;
-static double shift_y = 10;
+static double dx = (2*shift_x)/(nx-1);
+static double dy = (2*shift_y)/(ny-1);
 
 // Initalize Array
 double *output = new double[nx*ny]; 
@@ -53,15 +54,21 @@ double K2y = sqrt(3)/2 * K0;
 
 // Locations of Defects
 int sep = 20; // nm separation constant
-double R1x = -sep * a;
-double R1y = 0;
-double R2x = sep *a;
-double R2y = 0;
+//double R1x = -sep * a;
+//double R1y = 0;
+//double R2x = sep *a;
+//double R2y = 0;
+
+// Hardcode
+double R1x = -1.17;
+double R1y = -0.32;
+double R2x = 1.17;
+double R2y = 0.32;
 
 ////////////////////
 // Misc Parameters//
 ////////////////////
-const double smooth = 1e-9; 
+const double smooth = 0; 
 
 
 struct GFParams{
@@ -138,7 +145,7 @@ gsl_complex Hankel0(double x){
     if (x == 0){
         x += 1e-9;
     }
-    return gsl_complex_rect(gsl_sf_bessel_J0(x), gsl_sf_bessel_Y0(x));
+    return gsl_complex_rect(gsl_sf_bessel_J0(x + smooth), gsl_sf_bessel_Y0(x + smooth));
 }
 gsl_complex Hankel1(double x){
     if (x < 0){
@@ -147,7 +154,7 @@ gsl_complex Hankel1(double x){
     if (x == 0){
         x += 1e-9;
     }
-    return gsl_complex_rect(gsl_sf_bessel_J1(x), gsl_sf_bessel_Y1(x));
+    return gsl_complex_rect(gsl_sf_bessel_J1(x + smooth), gsl_sf_bessel_Y1(x + smooth));
 }
 // Tells you for a given K vector which valley you are located and assigns either 1 or -1
 int vIndex(double Kx, double Ky){
@@ -201,7 +208,7 @@ gsl_complex GF(double w, double Kx, double Ky, double Rx, double Ry, string sind
 
 // Onsite Green's Function Matrix Element r->0
 gsl_complex G0AA(double w){
-    double real_part = (M_PI * w)/(pow(VF*Hbar, 2)) * log(pow(w, 2)/(pow(hop, 2) - pow(w, 2)));
+    double real_part = (M_PI * w)/(pow(VF*Hbar, 2)) * log(pow(w, 2)/(8*M_PI*pow(VFH, 2) - pow(w, 2)));
     double imag_part = -(pow(M_PI, 2)*abs(w))/(pow(VF*Hbar, 2));
 
     return gsl_complex_rect(real_part, imag_part);
@@ -350,6 +357,36 @@ double f(double w, double x, double y, vScheme vs){
     return -1*GSL_IMAG(gsl_complex_add(gsl_complex_add(cp1, cp2), cp3));
 }
 
+struct ldos_param{
+    double x;
+    double y;
+    vScheme vs;
+};
+
+// Wrapping ldos function for gsl integration (method requires certain format)
+double f_wrapper(double w, void* params) {
+    ldos_param* p = static_cast<ldos_param*>(params);
+
+    return f(w, p->x, p->y, p->vs);
+}
+
+double integrate_f(double x, double y, vScheme vs){
+    gsl_integration_workspace * w = gsl_integration_workspace_alloc (1000);
+        
+    double result, error;
+
+    ldos_param lp = {x, y, vs};
+
+    gsl_function F;
+    F.function = &f_wrapper;
+    F.params = &lp;
+    
+    gsl_integration_qags (&F, 0, 0.1, 0, 1e-5, 1000,
+                            w, &result, &error); 
+
+    return result;
+    }
+
 // Evaluate Function over Grid
 int calculateGrid(double* d_list){
     omp_set_num_threads(THREAD_NUM); // set number of threads in "parallel" blocks
@@ -358,7 +395,8 @@ int calculateGrid(double* d_list){
         #pragma omp for
         for (int i = 0; i < nx; i++){
             for (int j = 0; j < ny; j++){
-                d_list[j*nx + i] = f(0.2, cFI(i, dx, shift_x), cFI(j, dy, shift_y), vs1);
+                //d_list[j*nx + i] = f(0.2, cFI(i, dx, shift_x), cFI(j, dy, shift_y), vs1);
+                d_list[j*nx + i] = integrate_f(cFI(i, dx, shift_x), cFI(j, dy, shift_y), vs1);
             }
         }
     }
@@ -410,12 +448,24 @@ int setVScheme(string valleys){
         double Kx = 0;
         double Ky = 0;
         if (token == "K"){
-            Kx = K0;
+            //Kx = K0;
+            //Ky = 0;
+
+            //Kx = K0;
+            //Ky = 0;
+
+            Kx = -K0;
             Ky = 0;
         }
         else if (token == "P"){
-            Kx = -K0;
-            Ky = 0;
+            //Kx = -K0;
+            //Ky = 0;
+
+            //Kx = K1x;
+            //Ky = K1y;
+
+            Kx = K2x;
+            Ky = K2y;
         }
         switch(i){
             case 0: vs1.Kax = Kx; vs1.Kay = Ky; break;
@@ -468,9 +518,9 @@ int bFromSep(int sep){
 
 int main()
 {
-    for (int i = 10; i < 16; i++){
+    for (int i = 7; i < 8; i++){
         int bs = bFromSep(2*i + 1);
-        updateSep(bs);
+        //updateSep(bs);
         readRun();
     }
      
