@@ -19,8 +19,8 @@ namespace fs = std::filesystem;
 // Grid Parameters //
 /////////////////////
 
-static int nx = 601;
-static int ny = 601;
+static int nx = 301;
+static int ny = 301;
 
 static double shift_x = 6;
 static double shift_y = 6;
@@ -34,7 +34,7 @@ double *output = new double[nx*ny];
 ////////////////////////
 // Physics Parameters //
 ///////////////////////
-const double V0 = 1; // eV
+const double V0 = 100; // eV
 const double VF = 9.060911856897319e14; // nm/s 
 const double a = 0.24595; // nm
 const double acc = 0.142; //nm
@@ -60,10 +60,10 @@ int sep = 20; // nm separation constant
 //double R2y = 0;
 
 // Hardcode
-double R1x = -1.17;
-double R1y = -0.32;
-double R2x = 1.17;
-double R2y = 0.32;
+double R1x = -1.23;
+double R1y = -0.39;
+double R2x = 1.23;
+double R2y = 0.39;
 
 ////////////////////
 // Misc Parameters//
@@ -387,6 +387,141 @@ double integrate_f(double x, double y, vScheme vs){
     return result;
     }
 
+
+double gma(double w, double vx, double vy){
+    return w * norm(vx, vy)/VFH;
+}
+
+// Condensed LDOS
+// Precaculate t and R for given energy
+double rho(int index, double w, double x, double y, vScheme vs){
+
+    double dR1x = x - R1x;
+    double dR1y = y - R1y;
+    double dR2x = x - R2x;
+    double dR2y = y - R2y;
+    double d12x = R1x - R2x;
+    double d12y = R1y - R2y;
+
+    // Can figure out how to make these shared
+    gsl_complex R = Rfrac(w, vs.Kgx, vs.Kgy, vs.Kgtx, vs.Kgty);
+    gsl_complex t = telem(w);
+    gsl_complex t2 = gsl_complex_mul(t, t);
+
+    // 5-8 are multiplied by i so take minus of the real
+
+    double result = 0;
+    // 2 comes from euler cosine identity
+    double cfrac2 = 2 * pow(w, 2)/pow(2*VFH, 4);
+    double cfrac3 = 2 * pow(w, 3)/pow(2*VFH, 6);
+    if (index == 1){
+        gsl_complex h01r = Hankel0(gma(w, dR1x, dR1y));
+        result = cfrac2 * GSL_IMAG(gsl_complex_mul(t, gsl_complex_mul(R, gsl_complex_mul(h01r, h01r))));
+    }
+    else if (index == 2){
+        gsl_complex h11r = Hankel1(gma(w, dR1x, dR1y));
+        result = cfrac2 * GSL_IMAG(gsl_complex_mul(t, gsl_complex_mul(R, gsl_complex_mul(h11r, h11r))));
+    }
+    else if(index == 3){
+        gsl_complex h02r = Hankel0(gma(w, dR2x, dR2y));
+        result = cfrac2 * GSL_IMAG(gsl_complex_mul(t, gsl_complex_mul(R, gsl_complex_mul(h02r, h02r))));
+    }
+    else if (index == 4){
+        gsl_complex h12r = Hankel1(gma(w, dR2x, dR2y));
+        result = cfrac2 * GSL_IMAG(gsl_complex_mul(t, gsl_complex_mul(R, gsl_complex_mul(h12r, h12r))));
+    }
+    else if (index == 5){
+        gsl_complex hankels = gsl_complex_mul(gsl_complex_mul(Hankel0(gma(w, d12x, d12y)), Hankel0(gma(w, dR1x, dR1y))), Hankel0(gma(w, dR2x, dR2y)));
+        gsl_complex cpref = gsl_complex_mul(R, t2);
+
+        return cfrac3 * -GSL_REAL(gsl_complex_mul(cpref, hankels));
+    }
+    else if (index == 6){
+        gsl_complex hankels = gsl_complex_mul(gsl_complex_mul(Hankel0(gma(w, d12x, d12y)), Hankel1(gma(w, dR1x, dR1y))), Hankel0(gma(w, dR2x, dR2y)));
+        gsl_complex cpref = gsl_complex_mul(R, t2);
+
+        return cfrac3 * -GSL_REAL(gsl_complex_mul(cpref, hankels));
+    }
+    else if (index == 7){
+        gsl_complex hankels = gsl_complex_mul(gsl_complex_mul(Hankel1(gma(w, d12x, d12y)), Hankel1(gma(w, dR1x, dR1y))), Hankel0(gma(w, dR2x, dR2y)));
+        gsl_complex cpref = gsl_complex_mul(R, t2);
+
+        return cfrac3 * -GSL_REAL(gsl_complex_mul(cpref, hankels));
+    }
+    else if (index == 8){
+        gsl_complex hankels = gsl_complex_mul(gsl_complex_mul(Hankel1(gma(w, d12x, d12y)), Hankel0(gma(w, dR1x, dR1y))), Hankel1(gma(w, dR2x, dR2y)));
+        gsl_complex cpref = gsl_complex_mul(R, t2);
+
+        return cfrac3 * -GSL_REAL(gsl_complex_mul(cpref, hankels));
+    }
+
+    return result;
+}
+
+double condensedLDOS(double w, double x, double y, vScheme vs){
+    double dR1x = x - R1x;
+    double dR1y = y - R1y;
+    double dR2x = x - R2x;
+    double dR2y = y - R2y;
+    double d12x = R1x - R2x;
+    double d12y = R1y - R2y;
+
+    double thet1 = theta(dR1x, dR1y);
+    double thet2 = theta(dR2x, dR2y);
+
+    double term1 = -rho(1, w, x, y, vs)*cos(dot(vs.Katx-vs.Kax, vs.Katy-vs.Kay, dR1x, dR1y))\
+    -rho(2, w, x, y, vs)*vIndex(vs.Katx, vs.Katy)*vIndex(vs.Kax, vs.Kay)*cos(dot(vs.Katx-vs.Kax, vs.Katy-vs.Kay, dR1x, dR1y)-\
+    (vIndex(vs.Katx, vs.Katy)-vIndex(vs.Kax, vs.Kay))*thet1);
+
+    double term2 = -rho(3, w, x, y, vs)*cos(dot(vs.Kbtx-vs.Kbx, vs.Kbty-vs.Kby, dR2x, dR2y))\
+    -rho(4, w, x, y, vs)*vIndex(vs.Kbtx, vs.Kbty)*vIndex(vs.Kbx, vs.Kby)*cos(dot(vs.Kbtx-vs.Kbx, vs.Kbty-vs.Kby, dR2x, dR2y)-\
+    (vIndex(vs.Kbtx, vs.Kbty)-vIndex(vs.Kbx, vs.Kby))*thet2);
+
+    double term3 = rho(5, w, x, y, vs)*cos(dot(vs.Kax-vs.Kgtx, vs.Kay-vs.Kgty, dR1x, dR1y) + dot(vs.Kgtx-vs.Kbtx, vs.Kgtx-vs.Kbty, dR2x, dR2y))\
+    +rho(6, w, x, y, vs)*vIndex(vs.Katx, vs.Katy)*vIndex(vs.Kbx, vs.Kby)*cos(dot(vs.Kax-vs.Kgtx, vs.Kay-vs.Kgty, dR1x, dR1y) +\
+     dot(vs.Kgtx-vs.Kbtx, vs.Kgtx-vs.Kbty, dR2x, dR2y)+vIndex(vs.Katx, vs.Katy)*thet1 -vIndex(vs.Kbx, vs.Kby)*thet2);
+    
+    double term4 = -rho(7, w, x, y, vs)*vIndex(vs.Kgtx, vs.Kgty)*vIndex(vs.Katx, vs.Katy)*cos(dot(vs.Katx-vs.Kgtx, vs.Katy-vs.Kgty, dR1x, dR1y) + dot(vs.Kgtx-vs.Kbx, vs.Kgtx-vs.Kby, dR2x, dR2y) \
+    - vIndex(vs.Katx, vs.Katy)*thet1)\
+    +rho(8, w, x, y, vs)*vIndex(vs.Kgtx, vs.Kgty)*vIndex(vs.Kbx, vs.Kby)*cos(dot(vs.Katx-vs.Kgtx, vs.Katy-vs.Kgty, dR1x, dR1y) +\
+     dot(vs.Kgtx-vs.Kbx, vs.Kgtx-vs.Kby, dR2x, dR2y) - vIndex(vs.Kbx, vs.Kby)*thet2);
+
+    double term5 = rho(5, w, x, y, vs)*cos(dot(vs.Kgx-vs.Kax, vs.Kgy-vs.Kay, dR1x, dR1y) + dot(vs.Kbtx-vs.Kgx, vs.Kbtx-vs.Kgy, dR2x, dR2y))\
+    +rho(6, w, x, y, vs)*vIndex(vs.Kax, vs.Kay)*vIndex(vs.Kbtx, vs.Kbty)*cos(dot(vs.Kgx-vs.Kax, vs.Kgy-vs.Kay, dR1x, dR1y) +\
+     dot(vs.Kbtx-vs.Kgx, vs.Kbtx-vs.Kgy, dR2x, dR2y)-vIndex(vs.Kax, vs.Kay)*thet1 +vIndex(vs.Kbtx, vs.Kbty)*thet2);
+    
+    double term6 = -rho(7, w, x, y, vs)*vIndex(vs.Kgx, vs.Kgy)*vIndex(vs.Kax, vs.Kay)*cos(dot(vs.Kgx-vs.Kax, vs.Kgy-vs.Kay, dR1x, dR1y) + dot(vs.Kbtx-vs.Kgx, vs.Kbtx-vs.Kgy, dR2x, dR2y) \
+    - vIndex(vs.Kax, vs.Kay)*thet1)\
+    +rho(8, w, x, y, vs)*vIndex(vs.Kgx, vs.Kgy)*vIndex(vs.Kbtx, vs.Kbty)*cos(dot(vs.Kgx-vs.Kax, vs.Kgy-vs.Kay, dR1x, dR1y) +\
+     dot(vs.Kbtx-vs.Kgx, vs.Kbtx-vs.Kgy, dR2x, dR2y) - vIndex(vs.Kbtx, vs.Kbty)*thet2);
+
+    return term1 + term2 + term3 + term4 + term5 + term6;
+}
+
+double f_wrapper_cond(double w, void* params) {
+    ldos_param* p = static_cast<ldos_param*>(params);
+
+    return condensedLDOS(w, p->x, p->y, p->vs);
+}
+
+
+double integrate_f_cond(double x, double y, vScheme vs){
+    gsl_integration_workspace * w = gsl_integration_workspace_alloc (1000);
+        
+    double result, error;
+
+    ldos_param lp = {x, y, vs};
+
+    gsl_function F;
+    F.function = &f_wrapper_cond;
+    F.params = &lp;
+    
+    gsl_integration_qags (&F, 0, 0.1, 0, 1e-5, 1000,
+                            w, &result, &error); 
+
+    return result;
+    }
+
 // Evaluate Function over Grid
 int calculateGrid(double* d_list){
     omp_set_num_threads(THREAD_NUM); // set number of threads in "parallel" blocks
@@ -396,7 +531,8 @@ int calculateGrid(double* d_list){
         for (int i = 0; i < nx; i++){
             for (int j = 0; j < ny; j++){
                 //d_list[j*nx + i] = f(0.2, cFI(i, dx, shift_x), cFI(j, dy, shift_y), vs1);
-                d_list[j*nx + i] = integrate_f(cFI(i, dx, shift_x), cFI(j, dy, shift_y), vs1);
+                //d_list[j*nx + i] = integrate_f(cFI(i, dx, shift_x), cFI(j, dy, shift_y), vs1);
+                d_list[j*nx + i] = integrate_f_cond(cFI(i, dx, shift_x), cFI(j, dy, shift_y), vs1);
             }
         }
     }
