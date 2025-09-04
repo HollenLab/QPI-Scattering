@@ -81,6 +81,8 @@ def pv(x, y, sigma):
 def potential(x, y):
   return pv(x-(n*at*np.tan(np.pi/3)), y+at/2, 1e-1) + pv(x+(n*at*np.tan(np.pi/3)), y+at/2, 1e-1)
 
+print(n*at*np.tan(np.pi/3), at/2)
+
   
 model = pb.Model(graphene.monolayer(), 
                  pb.rectangle(50, 50), 
@@ -135,7 +137,7 @@ z = x*0
 # Every site impacts the points like a gaussian
 # See Slater-Koster tightbinding for graphene band structure
 for (X, Y, psi2) in tqdm(zip(X, Y, psi2)):
-  z += psi2*np.exp(-((x-X)**2+(y-Y)**2)/(at)**2)
+  z += psi2*np.exp(-((x-X)**2+(y-Y)**2)/(2*at)**2)
 
 z_min, z_max = 0, np.abs(z).max()
 

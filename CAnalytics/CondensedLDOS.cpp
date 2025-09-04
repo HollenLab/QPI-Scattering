@@ -19,11 +19,11 @@ namespace fs = std::filesystem;
 // Grid Parameters //
 /////////////////////
 
-static int nx = 301;
-static int ny = 301;
+static int nx = 501;
+static int ny = 501;
 
-static double shift_x = 10;
-static double shift_y = 10;
+static double shift_x = 5;
+static double shift_y = 5;
 
 static double dx = (2*shift_x)/(nx-1);
 static double dy = (2*shift_y)/(ny-1);
@@ -34,10 +34,11 @@ double *output = new double[nx*ny];
 ////////////////////////
 // Physics Parameters //
 ///////////////////////
-const double V0 = 100; // eV
-const double VF = 9.060911856897319e14; // nm/s 
+double V0 = 20; // eV
+const double VF = 906091185689731.9; // nm/s 
 const double a = 0.24595; // nm
-const double acc = 0.142; //nm
+//const double acc = 0.142; //nm
+const double acc = a/sqrt(3);
 const double hop = -2.8; // eV
 const double Hbar = 6.582119569e-16; // eV * s
 const double VFH = VF * Hbar;
@@ -65,12 +66,20 @@ int sep = 20; // nm separation constant
 //double R2x = 1.23;
 //double R2y = 0.39;
 
-// Try 1.10677439266261 0.3904980714447682
-double R1x = -1.1068;
-double R1y = -0.3905;
-double R2x = 1.1068;
-double R2y = 0.3905;
+//double R1x = -0.55;
+//double R1y = 0.071;
+//double R2x = 0.55;
+//double R2y = -0.071;
 
+double R1x = -1.045;
+double R1y = 0.745;
+double R2x = 1.045;
+double R2y = -0.745;
+
+//double R1x = -1.72;
+//double R1y = 0.071;
+//double R2x = +1.72;
+//double R2y = 0.071;
 
 ////////////////////
 // Misc Parameters//
@@ -86,36 +95,18 @@ struct GFParams{
     string sindex;
 };
 
-struct vScheme{
-    double Kgx;
-    double Kgy;
-    double Kgtx;
-    double Kgty;
-    double Kax;
-    double Kay;
-    double Katx;
-    double Katy;
-    double Kbx;
-    double Kby;
-    double Kbtx;
-    double Kbty;
-};
-
-//const vScheme vs1 = {K0, 0, -K0, 0, K0, 0, -K0, 0, K0, 0, -K0, 0};
-vScheme vs1 = {K0, 0, K0, 0, K0, 0, K0, 0, K0, 0, K0, 0};
-
 // Change the separation and all the variables related to separation
 int updateSep(int sepnum){
 
     // Separation is an integer related to number of unit cells in between the defect's location
     // Two unit cells are seperated by the width of the graphene hexagon a_cc * tan(60)
-    double h = 2*acc * tan(M_PI/3);
+    double h = acc * tan(M_PI/3);
 
     sep = sepnum; // nm separation constant
     R1x = -sep * h;
-    R1y = 0;
+    R1y = -acc/2;
     R2x = sep *h;
-    R2y = 0;
+    R2y = -acc/2;
 
     return 0;
 }
@@ -217,7 +208,8 @@ gsl_complex GF(double w, double Kx, double Ky, double Rx, double Ry, string sind
 // I think energy cutoff should relate to hopping? Makes sense
 // Or the energy value that relates to normalization...
 gsl_complex G0AA(double w){
-    double real_part = (w)/(pow(2*VF*Hbar, 2)*4*M_PI) * log(pow(w, 2)/(8*M_PI*pow(VFH, 2) - pow(w, 2)));
+    //double real_part = (w)/(pow(2*VF*Hbar, 2)*4*M_PI) * log(pow(w, 2)/(8*M_PI*pow(VFH, 2) - pow(w, 2)));
+    double real_part = (w)/(pow(2*VF*Hbar, 2)*4*M_PI) * log(pow(w, 2)/(pow(hop, 2) - pow(w, 2)));
     double imag_part = -(M_PI*abs(w))/(pow(VF*Hbar, 2)*4*M_PI);
 
     return gsl_complex_rect(real_part, imag_part);
@@ -249,168 +241,76 @@ gsl_complex Rfrac(double w){
 
     GFParams p1 = {K1x, K1y, d12x, d12y, "AA"};
     GFParams p2 = {K2x, K2y, -d12x, -d12y, "AA"};
-    GFParams p3 = {K1x, K1y, d12x, d12y, "AB"};
-    GFParams p4 = {K2x, K2y, -d12x, -d12y, "BA"};
 
-    gsl_complex tnum = telem(0.2);
+    gsl_complex tnum = telem(w);
     gsl_complex tnum2 = gsl_complex_mul(tnum, tnum);
 
-    gsl_complex add4 = gsl_complex_mul(tnum2, gsl_complex_add(orderone(w, p1, p2), orderone(w, p3, p4)));
+    gsl_complex add4 = gsl_complex_mul(tnum2, orderone(w, p1, p2));
     gsl_complex denom = gsl_complex_add(gsl_complex_rect(1, 0), gsl_complex_mul(gsl_complex_rect(-1, 0), add4));
 
     return gsl_complex_div(gsl_complex_rect(1, 0), denom);
     //return gsl_complex_rect(1, 0);
 }
 
-// Caluclating and summing all the LDOS terms
-double f(double w, double x, double y, vScheme vs){
+gsl_complex RfracAB(double w){
 
-    double dR1x = x-R1x;
-    double dR1y = y-R1y;
-    double dR2x = x - R2x;
-    double dR2y = y - R2y;
     double d12x = R1x - R2x;
     double d12y = R1y - R2y;
 
-    ///////////////////////////
-    //// First Order Terms ////
-    ///////////////////////////
-
-    ///////////////////////
-    // alpha tilde alpha //
-    ///////////////////////
-    GFParams p1 = {vs.Katx, vs.Katy, -dR1x, -dR1y, "AA"};
-    GFParams p2 = {vs.Kax, vs.Kay, dR1x, dR1y, "AA"};
-    gsl_complex term1 = orderone(w, p1, p2);
-
-    p1 = {vs.Katx, vs.Katy, -dR1x, -dR1y, "AB"};
-    p2 = {vs.Kax, vs.Kay, dR1x, dR1y, "BA"};
-    gsl_complex term2 = orderone(w, p1, p2);
-
-    /////////////////////
-    // beta tilde beta //
-    /////////////////////
-    p1 = {vs.Kbtx, vs.Kbty, -dR2x, -dR2y, "AA"};
-    p2 = {vs.Kbx, vs.Kby, dR2x, dR2y, "AA"};
-    gsl_complex term3 = orderone(w, p1, p2);
-
-    p1 = {vs.Kbtx, vs.Kbty, -dR2x, -dR2y, "AB"};
-    p2 = {vs.Kbx, vs.Kby, dR2x, dR2y, "BA"};
-    gsl_complex term4 = orderone(w, p1, p2);
-
-    gsl_complex pfo1 = gsl_complex_mul(Rfrac(w), telem(w));
-    gsl_complex term_order_one = gsl_complex_add(gsl_complex_add(gsl_complex_add(term4, term3), term2), term1);
-    gsl_complex cp1 = gsl_complex_mul(pfo1, term_order_one);
-
-    ////////////////////////////
-    //// Second Order Terms ////
-    ////////////////////////////
-
-    /////////////
-    // gt at b //
-    /////////////
-    p1 = {vs.Kgtx, vs.Kgty, -d12x, -d12y, "AA"};
-    p2 = {vs.Katx, vs.Katy, -dR1x, -dR1y, "AA"};
-    GFParams p3 = {vs.Kbx, vs.Kby, dR2x, dR2y, "AA"};
-    gsl_complex term5 = ordertwo(w, p1, p2, p3);
-
-    p1 = {vs.Kgtx, vs.Kgty, -d12x, -d12y, "AA"};
-    p2 = {vs.Katx, vs.Katy, -dR1x, -dR1y, "AB"};
-    p3 = {vs.Kbx, vs.Kby, dR2x, dR2y, "BA"};
-    gsl_complex term6 = ordertwo(w, p1, p2, p3);
-    
-    /////////////
-    // g bt a //
-    /////////////
-    p1 = {vs.Kgx, vs.Kgy, d12x, d12y, "AA"};
-    p2 = {vs.Kbtx, vs.Kbty, -dR2x, -dR2y, "AA"};
-    p3 = {vs.Kax, vs.Kay, dR1x, dR1y, "AA"};
-    gsl_complex term7 = ordertwo(w, p1, p2, p3);
-
-    p1 = {vs.Kgx, vs.Kgy, d12x, d12y, "AA"};
-    p2 = {vs.Kbtx, vs.Kbty, -dR2x, -dR2y, "AB"};
-    p3 = {vs.Kax, vs.Kay, dR1x, dR1y, "BA"};
-    gsl_complex term8 = ordertwo(w, p1, p2, p3);
-
-    gsl_complex pfo2 = gsl_complex_mul(pfo1, telem(w));
-    gsl_complex term_order_two = gsl_complex_add(gsl_complex_add(gsl_complex_add(term8, term7), term6), term5);
-    gsl_complex cp2 = gsl_complex_mul(pfo2, term_order_two);
-
-    /////////////////////////////
-    // Appended 2nd Order Terms//
-    /////////////////////////////
-    /////////////
-    // gt at b //
-    /////////////
-    p1 = {vs.Kgtx, vs.Kgty, -d12x, -d12y, "AB"};
-    p2 = {vs.Katx, vs.Katy, -dR1x, -dR1y, "BA"};
-    p3 = {vs.Kbx, vs.Kby, dR2x, dR2y, "AA"};
-    gsl_complex term9 = ordertwo(w, p1, p2, p3);
+    // Does not depend on K1 or K2 so we hard code them here
+    double K1x = K2x;
+    double K1y = K2y;
+    double K2x = K2x;
+    double K2y = K2y;
 
 
-    p1 = {vs.Kgtx, vs.Kgty, -d12x, -d12y, "AB"};
-    p2 = {vs.Katx, vs.Katy, -dR1x, -dR1y, "BB"};
-    p3 = {vs.Kbx, vs.Kby, dR2x, dR2y, "BA"};
-    gsl_complex term10 = ordertwo(w, p1, p2, p3);
+    GFParams p1 = {K1x, K1y, d12x, d12y, "AB"};
+    GFParams p2 = {K2x, K2y, -d12x, -d12y, "BA"};
 
-    /////////////
-    // g bt a //
-    /////////////
-    p1 = {vs.Kgx, vs.Kgy, d12x, d12y, "AB"};
-    p2 = {vs.Kbtx, vs.Kbty, -dR2x, -dR2y, "BA"};
-    p3 = {vs.Kax, vs.Kay, dR1x, dR1y, "AA"};
-    gsl_complex term11 = ordertwo(w, p1, p2, p3);
+    gsl_complex tnum = telem(w);
+    gsl_complex tnum2 = gsl_complex_mul(tnum, tnum);
 
+    gsl_complex add4 = gsl_complex_mul(tnum2, orderone(w, p1, p2));
+    gsl_complex denom = gsl_complex_add(gsl_complex_rect(1, 0), gsl_complex_mul(gsl_complex_rect(-1, 0), add4));
 
-    p1 = {vs.Kgx, vs.Kgy, d12x, d12y, "AB"};
-    p2 = {vs.Kbtx, vs.Kbty, -dR2x, -dR2y, "BB"};
-    p3 = {vs.Kax, vs.Kay, dR1x, dR1y, "BA"};
-    gsl_complex term12 = ordertwo(w, p1, p2, p3);
-
-    gsl_complex term_order_two_extra = gsl_complex_add(gsl_complex_add(gsl_complex_add(term12, term11), term10), term9);
-    gsl_complex cp3 = gsl_complex_mul(pfo2, term_order_two_extra);
-
-
-    return -1*GSL_IMAG(gsl_complex_add(gsl_complex_add(cp1, cp2), cp3));
+    return gsl_complex_div(gsl_complex_rect(1, 0), denom);
+    //return gsl_complex_rect(1, 0);
 }
 
-struct ldos_param{
-    double x;
-    double y;
-    vScheme vs;
-};
+gsl_complex RfracBA(double w){
+
+    double d12x = R1x - R2x;
+    double d12y = R1y - R2y;
+
+    // Does not depend on K1 or K2 so we hard code them here
+    double K1x = K2x;
+    double K1y = K2y;
+    double K2x = K2x;
+    double K2y = K2y;
+
+
+    GFParams p1 = {K1x, K1y, d12x, d12y, "BA"};
+    GFParams p2 = {K2x, K2y, -d12x, -d12y, "AB"};
+
+    gsl_complex tnum = telem(w);
+    gsl_complex tnum2 = gsl_complex_mul(tnum, tnum);
+
+    gsl_complex add4 = gsl_complex_mul(tnum2, orderone(w, p1, p2));
+    gsl_complex denom = gsl_complex_add(gsl_complex_rect(1, 0), gsl_complex_mul(gsl_complex_rect(-1, 0), add4));
+
+    return gsl_complex_div(gsl_complex_rect(1, 0), denom);
+    //return gsl_complex_rect(1, 0);
+}
+
+
 
 struct ldos_param_c{
     double x;
     double y;
     double dKx;
     double dKy;
+    string sblattices;
 };
-
-// Wrapping ldos function for gsl integration (method requires certain format)
-double f_wrapper(double w, void* params) {
-    ldos_param* p = static_cast<ldos_param*>(params);
-
-    return f(w, p->x, p->y, p->vs);
-}
-
-double integrate_f(double x, double y, vScheme vs){
-    gsl_integration_workspace * w = gsl_integration_workspace_alloc (1000);
-        
-    double result, error;
-
-    ldos_param lp = {x, y, vs};
-
-    gsl_function F;
-    F.function = &f_wrapper;
-    F.params = &lp;
-    
-    gsl_integration_qags (&F, 0, 0.1, 0, 1e-5, 1000,
-                            w, &result, &error); 
-
-    return result;
-    }
-
 
 double gma(double w, double vx, double vy){
     return w * norm(vx, vy)/VFH;
@@ -428,7 +328,6 @@ double rho(int index, double w, double x, double y){
     double d12x = R1x - R2x;
     double d12y = R1y - R2y;
 
-    vScheme vs2 = {K0, 0, K0, 0, K0, 0, K0, 0, K0, 0, K0, 0};
 
     // Can figure out how to make these shared
     // Does the valley actually matter for R? it shouldnt...
@@ -471,19 +370,7 @@ double rho(int index, double w, double x, double y){
         return cfrac3 * GSL_REAL(gsl_complex_mul(cpref, hankels));
     }
     else if (index == 6){
-        gsl_complex hankels = gsl_complex_mul(gsl_complex_mul(Hankel0(gma(w, d12x, d12y)), Hankel1(gma(w, dR1x, dR1y))), Hankel0(gma(w, dR2x, dR2y)));
-        gsl_complex cpref = gsl_complex_mul(R, t2);
-
-        return cfrac3 * GSL_REAL(gsl_complex_mul(cpref, hankels));
-    }
-    else if (index == 7){
-        gsl_complex hankels = gsl_complex_mul(gsl_complex_mul(Hankel1(gma(w, d12x, d12y)), Hankel1(gma(w, dR1x, dR1y))), Hankel0(gma(w, dR2x, dR2y)));
-        gsl_complex cpref = gsl_complex_mul(R, t2);
-
-        return cfrac3 * GSL_REAL(gsl_complex_mul(cpref, hankels));
-    }
-    else if (index == 8){
-        gsl_complex hankels = gsl_complex_mul(gsl_complex_mul(Hankel1(gma(w, d12x, d12y)), Hankel0(gma(w, dR1x, dR1y))), Hankel1(gma(w, dR2x, dR2y)));
+        gsl_complex hankels = gsl_complex_mul(gsl_complex_mul(Hankel0(gma(w, d12x, d12y)), Hankel1(gma(w, dR1x, dR1y))), Hankel1(gma(w, dR2x, dR2y)));
         gsl_complex cpref = gsl_complex_mul(R, t2);
 
         return cfrac3 * GSL_REAL(gsl_complex_mul(cpref, hankels));
@@ -493,7 +380,119 @@ double rho(int index, double w, double x, double y){
     }
 }
 
-double condensedLDOS(double w, double x, double y, double dKx, double dKy){
+double rhoAB(int index, double w, double x, double y){
+    double dR1x = x - R1x;
+    double dR1y = y - R1y;
+    double dR2x = x - R2x;
+    double dR2y = y - R2y;
+    double d12x = R1x - R2x;
+    double d12y = R1y - R2y;
+
+
+    // Can figure out how to make these shared
+    // Does the valley actually matter for R? it shouldnt...
+    gsl_complex R = RfracAB(w);
+    gsl_complex t = telem(w);
+    gsl_complex t2 = gsl_complex_mul(t, t);
+
+    double cfrac2 = pow(w, 2)/pow(2*VFH, 4);
+    double cfrac3 = pow(w, 3)/pow(2*VFH, 6);
+
+    if (index == 1){
+        gsl_complex h01r = Hankel0(gma(w, dR1x, dR1y));
+        
+        return cfrac2 * GSL_IMAG(gsl_complex_mul(t, gsl_complex_mul(R, gsl_complex_mul(h01r, h01r)))); 
+    }
+    else if (index == 2){
+        gsl_complex h11r = Hankel1(gma(w, dR1x, dR1y));
+        
+        return cfrac2 * GSL_IMAG(gsl_complex_mul(t, gsl_complex_mul(R, gsl_complex_mul(h11r, h11r)))); 
+    }
+    else if (index == 3){
+        gsl_complex h02r = Hankel0(gma(w, dR2x, dR2y));
+        
+        return cfrac2 * GSL_IMAG(gsl_complex_mul(t, gsl_complex_mul(R, gsl_complex_mul(h02r, h02r))));
+    }
+    else if (index == 4){
+        gsl_complex h12r = Hankel1(gma(w, dR2x, dR2y));
+        
+        return cfrac2 * GSL_IMAG(gsl_complex_mul(t, gsl_complex_mul(R, gsl_complex_mul(h12r, h12r))));
+    }
+    else if (index == 5){
+        gsl_complex hankels = gsl_complex_mul(gsl_complex_mul(Hankel1(gma(w, d12x, d12y)), Hankel0(gma(w, dR1x, dR1y))), Hankel1(gma(w, dR2x, dR2y)));
+        gsl_complex cpref = gsl_complex_mul(R, t2);
+
+        return cfrac3 * GSL_REAL(gsl_complex_mul(cpref, hankels));
+    }
+    else if (index == 6){
+        gsl_complex hankels = gsl_complex_mul(gsl_complex_mul(Hankel1(gma(w, d12x, d12y)), Hankel1(gma(w, dR1x, dR1y))), Hankel0(gma(w, dR2x, dR2y)));
+        gsl_complex cpref = gsl_complex_mul(R, t2);
+
+        return cfrac3 * GSL_REAL(gsl_complex_mul(cpref, hankels));
+    }
+    else{
+        return 0;
+    }
+
+}
+
+double rhoBA(int index, double w, double x, double y){
+    double dR1x = x - R1x;
+    double dR1y = y - R1y;
+    double dR2x = x - R2x;
+    double dR2y = y - R2y;
+    double d12x = R1x - R2x;
+    double d12y = R1y - R2y;
+
+
+    // Can figure out how to make these shared
+    // Does the valley actually matter for R? it shouldnt...
+    gsl_complex R = RfracBA(w);
+    gsl_complex t = telem(w);
+    gsl_complex t2 = gsl_complex_mul(t, t);
+
+    double cfrac2 = pow(w, 2)/pow(2*VFH, 4);
+    double cfrac3 = pow(w, 3)/pow(2*VFH, 6);
+
+    if (index == 1){
+        gsl_complex h01r = Hankel0(gma(w, dR1x, dR1y));
+        
+        return cfrac2 * GSL_IMAG(gsl_complex_mul(t, gsl_complex_mul(R, gsl_complex_mul(h01r, h01r)))); 
+    }
+    else if (index == 2){
+        gsl_complex h11r = Hankel1(gma(w, dR1x, dR1y));
+        
+        return cfrac2 * GSL_IMAG(gsl_complex_mul(t, gsl_complex_mul(R, gsl_complex_mul(h11r, h11r)))); 
+    }
+    else if (index == 3){
+        gsl_complex h02r = Hankel0(gma(w, dR2x, dR2y));
+        
+        return cfrac2 * GSL_IMAG(gsl_complex_mul(t, gsl_complex_mul(R, gsl_complex_mul(h02r, h02r))));
+    }
+    else if (index == 4){
+        gsl_complex h12r = Hankel1(gma(w, dR2x, dR2y));
+        
+        return cfrac2 * GSL_IMAG(gsl_complex_mul(t, gsl_complex_mul(R, gsl_complex_mul(h12r, h12r))));
+    }
+    else if (index == 5){
+        gsl_complex hankels = gsl_complex_mul(gsl_complex_mul(Hankel1(gma(w, d12x, d12y)), Hankel0(gma(w, dR1x, dR1y))), Hankel1(gma(w, dR2x, dR2y)));
+        gsl_complex cpref = gsl_complex_mul(R, t2);
+
+        return cfrac3 * GSL_REAL(gsl_complex_mul(cpref, hankels));
+    }
+    else if (index == 6){
+        gsl_complex hankels = gsl_complex_mul(gsl_complex_mul(Hankel1(gma(w, d12x, d12y)), Hankel1(gma(w, dR1x, dR1y))), Hankel0(gma(w, dR2x, dR2y)));
+        gsl_complex cpref = gsl_complex_mul(R, t2);
+
+        return cfrac3 * GSL_REAL(gsl_complex_mul(cpref, hankels));
+    }
+    else{
+        return 0;
+    }
+
+}
+
+double condensedLDOS(double w, double x, double y, double dKx, double dKy, string sblattices){
     double dR1x = x - R1x;
     double dR1y = y - R1y;
     double dR2x = x - R2x;
@@ -503,45 +502,50 @@ double condensedLDOS(double w, double x, double y, double dKx, double dKy){
      
 
     double thet1 = theta(dR1x, dR1y);
-    double thet2 = theta(dR2x, dR2y);
+    double thet2 = theta(dR2x, dR2y); //add minus to change sublattice?
 
-    //Vortex Terms
-    gsl_complex dtht1 = gsl_complex_exp(gsl_complex_rect(0, -2*thet1));
-    gsl_complex dtht2 = gsl_complex_exp(gsl_complex_rect(0, -2*thet2));
-    gsl_complex thtsum = gsl_complex_exp(gsl_complex_rect(0, -thet1-thet2));
-    gsl_complex cos1term = gsl_complex_add(gsl_complex_exp(gsl_complex_rect(0, thet1)), gsl_complex_exp(gsl_complex_rect(0, -thet1)));
-    gsl_complex cos2term = gsl_complex_add(gsl_complex_exp(gsl_complex_rect(0, thet2)), gsl_complex_exp(gsl_complex_rect(0, -thet2)));
-
-    gsl_complex order2terms1 = gsl_complex_add(gsl_complex_add(gsl_complex_mul_real(thtsum, -2*rho(6, w, x, y)),\
-    gsl_complex_mul_real(cos1term, rho(7, w, x, y))),\
-    gsl_complex_mul_real(cos2term, rho(8, w, x, y)));
-
-    gsl_complex order2terms2 = gsl_complex_add(gsl_complex_add(gsl_complex_mul_real(thtsum, -2*rho(6, w, x, y)),\
-    gsl_complex_mul_real(cos1term, -rho(7, w, x, y))),\
-    gsl_complex_mul_real(cos2term, -rho(8, w, x, y)));
-
-    gsl_complex order1terms1 = gsl_complex_add_real(gsl_complex_mul_real(dtht1, rho(2, w, x, y)), 2*rho(5, w, x, y) - rho(1, w, x, y));
-    gsl_complex order1terms2 = gsl_complex_add_real(gsl_complex_mul_real(dtht2, rho(4, w, x, y)), 2*rho(5, w, x, y) - rho(3, w, x, y));
-
-    gsl_complex r1wave = gsl_complex_exp(gsl_complex_rect(0, dot(dKx, dKy, R1x, R1y)));
-    gsl_complex r2wave = gsl_complex_exp(gsl_complex_rect(0, dot(dKx, dKy, R2x, R2y)));
-
-    gsl_complex amp = gsl_complex_add(gsl_complex_mul(r1wave, gsl_complex_add(order1terms1, order2terms1)),\
-    gsl_complex_mul(r2wave, gsl_complex_add(order1terms2, order2terms2)));
-
-    //gsl_complex stuff = gsl_complex_add_real(gsl_complex_mul_real(dtht1, rho(2, w, x, y)), -rho(1, w, x, y));
-
-    //return pow(rho(1, w, x, y), 2) + pow(rho(2, w, x, y), 2) - rho(1, w, x, y)*rho(2, w, x, y)*2*cos(2*thet1);
-    //return GSL_REAL(amp);
-    //return gsl_complex_abs2(amp);
-    return gsl_complex_arg(amp);
+    if (sblattices == "AA"){
+        return (rho(1, w, x, y) - rho(5, w, x, y))*cos(dot(dKx, dKy, dR1x, dR1y))+(rho(3, w, x, y) - rho(5, w, x, y))*cos(dot(dKx, dKy, dR2x, dR2y))\
+    - rho(2, w, x, y)*cos(dot(dKx, dKy, dR1x, dR1y)-2*thet1) - rho(4, w, x, y)*cos(dot(dKx, dKy, dR2x, dR2y)-2*thet2) \
+    + rho(6, w, x, y)*(cos(dot(dKx, dKy, dR1x, dR1y)-thet1-thet2)+cos(dot(dKx, dKy, dR2x, dR2y)-thet1-thet2));
+    }
+    else if (sblattices == "AB"){
+        return rhoAB(1, w, x, y) * cos(dot(dKx, dKy, dR1x, dR1y)) - rhoAB(2, w, x, y) * cos(dot(dKx, dKy, dR1x, dR1y)-2*thet1) \
+        + rhoAB(3, w, x, y) * cos(dot(dKx, dKy, dR2x, dR2y)) - rhoAB(4, w, x, y) * cos(dot(dKx, dKy, dR2x, dR2y)+2*thet2) \
+        - 2*rhoAB(5, w, x, y) * cos(dot(dKx, dKy, dR1x, dR1y) + thet2) - 2*rhoAB(6, w, x, y) * cos(dot(dKx, dKy, dR1x, dR1y)- thet1) \
+        + 2*rhoAB(5, w, x, y) * cos(dot(dKx, dKy, dR2x, dR2y) + thet2) + 2*rhoAB(6, w, x, y) * cos(dot(dKx, dKy, dR2x, dR2y)- thet1);
+    }
+    // This is just a guess
+    else if (sblattices == "BA"){
+        return (rhoBA(1, w, x, y) * cos(dot(dKx, dKy, dR1x, dR1y)) - rhoBA(2, w, x, y) * cos(dot(dKx, dKy, dR1x, dR1y)+2*thet1) \
+        + rhoBA(3, w, x, y) * cos(dot(dKx, dKy, dR2x, dR2y)) - rhoBA(4, w, x, y) * cos(dot(dKx, dKy, dR2x, dR2y)-2*thet2) \
+        - 2*rhoBA(5, w, x, y) * cos(dot(dKx, dKy, dR1x, dR1y) - thet2) - 2*rhoBA(6, w, x, y) * cos(dot(dKx, dKy, dR1x, dR1y)+ thet1) \
+        + 2*rhoBA(5, w, x, y) * cos(dot(dKx, dKy, dR2x, dR2y) - thet2) + 2*rhoBA(6, w, x, y) * cos(dot(dKx, dKy, dR2x, dR2y)+ thet1));
+    }
+    // This is just a guess
+    else if (sblattices == "BB"){
+        return (rho(1, w, x, y) - rho(5, w, x, y))*cos(dot(dKx, dKy, dR1x, dR1y))+(rho(3, w, x, y) - rho(5, w, x, y))*cos(dot(dKx, dKy, dR2x, dR2y))\
+    + rho(2, w, x, y)*cos(dot(dKx, dKy, dR1x, dR1y)+2*thet1) + rho(4, w, x, y)*cos(dot(dKx, dKy, dR2x, dR2y)+2*thet2) \
+    - rho(6, w, x, y)*(cos(dot(dKx, dKy, dR1x, dR1y)+thet1+thet2)+cos(dot(dKx, dKy, dR2x, dR2y)+thet1+thet2));
+    }
+    else{
+        return 0;
+    }
     
 }
+
+struct ldos_param{
+    double x;
+    double y;
+    double dKx;
+    double dKy;
+    string sblattices;
+};
 
 double f_wrapper_cond(double w, void* params) {
     ldos_param_c* p = static_cast<ldos_param_c*>(params);
 
-    return condensedLDOS(w, p->x, p->y, p->dKx, p-> dKy);
+    return condensedLDOS(w, p->x, p->y, p->dKx, p-> dKy, p-> sblattices);
 }
 
 
@@ -550,7 +554,8 @@ double integrate_f_cond(double x, double y){
         
     double result, error;
 
-    ldos_param lp = {x, y, K0, 0};
+    //ldos_param lp = {x, y, K0, 0};
+    ldos_param lp = {x, y, K1x, K1y, "AA"};
 
     gsl_function F;
     F.function = &f_wrapper_cond;
@@ -583,7 +588,7 @@ int calculateGrid(double* d_list){
 
 // Writeout to file
 int save2file(double* d_list, string fname){
-    string fodir = "output/sep" + std::to_string(sep) + "a/";
+    string fodir = "output/sep" + std::to_string(int(V0)) + "a/";
     fs::create_directories(fodir);
     ofstream myfile (fodir + fname + "-ldos.tsv");
     if (myfile.is_open()){
@@ -613,76 +618,6 @@ int save2file(double* d_list, string fname){
     return 0;
 }
 
-// We use the GF for just one K point, so we need to assign each
-// propagator a valley
-// Valley Scheme: a, at, b, bt, g, gt
-int setVScheme(string valleys){
-    std::istringstream iss(valleys);
-    std::string token;
-
-    int i = 0;
-    while (iss >> token){
-        double Kx = 0;
-        double Ky = 0;
-        if (token == "K"){
-            //Kx = K0;
-            //Ky = 0;
-
-            //Kx = K0;
-            //Ky = 0;
-
-            Kx = -K0;
-            Ky = 0;
-        }
-        else if (token == "P"){
-            //Kx = -K0;
-            //Ky = 0;
-
-            //Kx = K1x;
-            //Ky = K1y;
-
-            Kx = K2x;
-            Ky = K2y;
-        }
-        switch(i){
-            case 0: vs1.Kax = Kx; vs1.Kay = Ky; break;
-            case 1: vs1.Katx = Kx; vs1.Katy = Ky; break;
-            case 2: vs1.Kbx = Kx; vs1.Kby = Ky; break;
-            case 3: vs1.Kbtx = Kx; vs1.Kbty = Ky; break;
-            case 4: vs1.Kgx = Kx; vs1.Kgy = Ky; break;
-            case 5: vs1.Kgtx = Kx; vs1.Kgty = Ky; break;
-            default: std::cerr << "Too many tokens!"; break;
-        }
-
-        i++;
-    }
-
-    return 0;
-}
-
-// We thorugh the file of all possible valley configurations (64)
-// and calculate the LDOS and then save at the end we sum them together.
-int readRun(){
-
-    std::cout << "Calculating for " << sep << "u\n";
-
-    std::ifstream infile("combinations.txt");
-
-    if(!infile){
-        std::cerr << "Failed to open file.\n";
-    }
-
-    string line;
-    while (std::getline(infile, line)){
-        std::cout << "Calculating for " << line << "...\n";
-        setVScheme(line);
-        calculateGrid(output);
-        save2file(output, line);
-    }
-
-    return 0;
-}
-
 int bFromSep(int sep){
 
     if (sep % 2 !=0){
@@ -705,9 +640,11 @@ int main()
     //calculateGrid(output);
     //save2file(output, "condensed");
 
-    for (int i = 1; i < 11; i++){
+    for (int i = 10; i < 11; i++){
         int bs = bFromSep(2*i + 1);
-        updateSep(i);
+        //updateSep(i);
+        cout << "Calculating for V0" << i;
+        V0 = 10 *i;
         calculateGrid(output);
         save2file(output, "condensed");
     }
