@@ -60,15 +60,12 @@ def createPlot(folderdir):
 
     fig, ax = plt.subplots(figsize=(10, 10))
 
-    Z[mask]=0
-
-    ZR = Z * (((X+tr_x) ** 2 + (Y+tr_y) ** 2)+ ((X-tr_x) ** 2 + (Y-tr_y) ** 2))
-
     #print(np.min(Z))
 
     #pc = ax.pcolormesh(xlin, ylin, ZR2, cmap="winter", vmax=15, vmin=-15)
     #pc = ax.pcolormesh(xlin, ylin, Z_masked, cmap="winter", vmax=1.5)
-    pc = ax.pcolormesh(xlin, ylin, ZR, cmap="seismic")
+    pc = ax.pcolormesh(xlin, ylin, Z, cmap="twilight")
+    ax.scatter([tr_x, -tr_x], [tr_y, -tr_y], marker="x", color="m")
     #fig.colorbar(pc)
 
     plt.tight_layout()

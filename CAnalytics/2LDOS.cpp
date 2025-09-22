@@ -66,10 +66,10 @@ int sep = 20; // nm separation constant
 //double R2y = 0.39;
 
 // Try 1.10677439266261 0.3904980714447682
-double R1x = -1.1068;
-double R1y = -0.3905;
-double R2x = 1.1068;
-double R2y = 0.3905;
+double R1x = -1.275;
+double R1y = 0.0131;
+double R2x = 1.275;
+double R2y = -0.0131;
 
 
 ////////////////////

@@ -22,8 +22,8 @@ namespace fs = std::filesystem;
 static int nx = 501;
 static int ny = 501;
 
-static double shift_x = 5;
-static double shift_y = 5;
+static double shift_x = 7;
+static double shift_y = 7;
 
 static double dx = (2*shift_x)/(nx-1);
 static double dy = (2*shift_y)/(ny-1);
@@ -43,15 +43,21 @@ const double hop = -2.8; // eV
 const double Hbar = 6.582119569e-16; // eV * s
 const double VFH = VF * Hbar;
 
-const double K0 = (4 * M_PI)/(3*sqrt(3)*acc);
+//2 or 4?
+const double K0 = (4.0 * M_PI)/(3.0*sqrt(3.0)*acc);
 
 // Rotate by 60 degrees
 double K1x = 0.5 * K0;
-double K1y = sqrt(3)/2 * K0;
+double K1y = sqrt(3)/2.0 * K0;
 
 // Rotate by 120 degrees
 double K2x = -0.5 * K0;
-double K2y = sqrt(3)/2 * K0;
+double K2y = sqrt(3)/2.0 * K0;
+
+// Variable for rotating in circl
+double crcR = 1.0; // nm
+double crcPhi = 0.0; 
+
 
 // Locations of Defects
 int sep = 20; // nm separation constant
@@ -71,10 +77,10 @@ int sep = 20; // nm separation constant
 //double R2x = 0.55;
 //double R2y = -0.071;
 
-double R1x = -1.045;
-double R1y = 0.745;
-double R2x = 1.045;
-double R2y = -0.745;
+double R1x = -1.244;
+double R1y = 0.278;
+double R2x = 1.244;
+double R2y = -0.278;
 
 //double R1x = -1.72;
 //double R1y = 0.071;
@@ -107,6 +113,18 @@ int updateSep(int sepnum){
     R1y = -acc/2;
     R2x = sep *h;
     R2y = -acc/2;
+
+    return 0;
+}
+
+int rotSep(){
+    double rDX = crcR * cos(crcPhi);
+    double rDY = crcR * sin(crcPhi);
+
+    R1x = -rDX;
+    R1y = -rDY;
+    R2x = rDX;
+    R2y = rDY;
 
     return 0;
 }
@@ -493,21 +511,35 @@ double rhoBA(int index, double w, double x, double y){
 }
 
 double condensedLDOS(double w, double x, double y, double dKx, double dKy, string sblattices){
-    double dR1x = x - R1x;
-    double dR1y = y - R1y;
-    double dR2x = x - R2x;
-    double dR2y = y - R2y;
+    double dR1x = R1x-x;
+    double dR1y = R1y-y;
+    double dR2x = R2x-x;
+    double dR2y = R2y-y;
     double d12x = R1x - R2x;
     double d12y = R1y - R2y;
      
+    gsl_complex C1 = gsl_complex_exp(gsl_complex_rect(0, dot(dKx, dKy, dR1x, dR1y)));
+    gsl_complex C2 = gsl_complex_exp(gsl_complex_rect(0, dot(dKx, dKy, dR2x, dR2y)));
 
     double thet1 = theta(dR1x, dR1y);
     double thet2 = theta(dR2x, dR2y); //add minus to change sublattice?
 
     if (sblattices == "AA"){
-        return (rho(1, w, x, y) - rho(5, w, x, y))*cos(dot(dKx, dKy, dR1x, dR1y))+(rho(3, w, x, y) - rho(5, w, x, y))*cos(dot(dKx, dKy, dR2x, dR2y))\
+       // return (rho(1, w, x, y) - rho(5, w, x, y))*cos(dot(dKx, dKy, dR1x, dR1y))+(rho(3, w, x, y) - rho(5, w, x, y))*cos(dot(dKx, dKy, dR2x, dR2y))\
     - rho(2, w, x, y)*cos(dot(dKx, dKy, dR1x, dR1y)-2*thet1) - rho(4, w, x, y)*cos(dot(dKx, dKy, dR2x, dR2y)-2*thet2) \
     + rho(6, w, x, y)*(cos(dot(dKx, dKy, dR1x, dR1y)-thet1-thet2)+cos(dot(dKx, dKy, dR2x, dR2y)-thet1-thet2));
+
+        // Complex wave representation
+        gsl_complex term1 = gsl_complex_add(gsl_complex_add(gsl_complex_rect(rho(1, w, x, y) - rho(5, w, x, y), 0), \
+        gsl_complex_mul_real(gsl_complex_exp(gsl_complex_rect(0, -2*thet1)),-rho(2,w,x,y))),\
+        gsl_complex_mul_real(gsl_complex_exp(gsl_complex_rect(0, -thet1-thet2)),rho(6,w,x,y)));
+
+        gsl_complex term2 = gsl_complex_add(gsl_complex_add(gsl_complex_rect(rho(3, w, x, y) - rho(5, w, x, y), 0), \
+        gsl_complex_mul_real(gsl_complex_exp(gsl_complex_rect(0, -2*thet2)),-rho(4,w,x,y))),\
+        gsl_complex_mul_real(gsl_complex_exp(gsl_complex_rect(0, -thet1-thet2)),rho(6,w,x,y)));
+
+        return gsl_complex_arg(gsl_complex_add(gsl_complex_mul(C1, term1), gsl_complex_mul(C2, term2)));
+
     }
     else if (sblattices == "AB"){
         return rhoAB(1, w, x, y) * cos(dot(dKx, dKy, dR1x, dR1y)) - rhoAB(2, w, x, y) * cos(dot(dKx, dKy, dR1x, dR1y)-2*thet1) \
@@ -549,13 +581,13 @@ double f_wrapper_cond(double w, void* params) {
 }
 
 
-double integrate_f_cond(double x, double y){
-    gsl_integration_workspace * w = gsl_integration_workspace_alloc (1000);
+double integrate_f_cond(double x, double y, gsl_integration_workspace * w){
+    //gsl_integration_workspace * w = gsl_integration_workspace_alloc (1000);
         
     double result, error;
 
     //ldos_param lp = {x, y, K0, 0};
-    ldos_param lp = {x, y, K1x, K1y, "AA"};
+    ldos_param lp = {x, y, K2x, K2y, "AA"};
 
     gsl_function F;
     F.function = &f_wrapper_cond;
@@ -570,31 +602,43 @@ double integrate_f_cond(double x, double y){
 // Evaluate Function over Grid
 int calculateGrid(double* d_list){
     omp_set_num_threads(THREAD_NUM); // set number of threads in "parallel" blocks
+    // more careful set  default none, then manually define which variables are shared
     #pragma omp parallel
     {
+
+        gsl_integration_workspace* w = gsl_integration_workspace_alloc(1000);
+
         #pragma omp for
         for (int i = 0; i < nx; i++){
             for (int j = 0; j < ny; j++){
                 //d_list[j*nx + i] = f(0.2, cFI(i, dx, shift_x), cFI(j, dy, shift_y), vs1);
                 //d_list[j*nx + i] = integrate_f(cFI(i, dx, shift_x), cFI(j, dy, shift_y), vs1);
-                d_list[j*nx + i] = integrate_f_cond(cFI(i, dx, shift_x), cFI(j, dy, shift_y));
+                d_list[j*nx + i] = integrate_f_cond(cFI(i, dx, shift_x), cFI(j, dy, shift_y), w);
                 //d_list[j*nx + i] = condensedLDOS(0.2, cFI(i, dx, shift_x), cFI(j, dy, shift_y), K0, 0);
             }
         }
+
+        gsl_integration_workspace_free(w);
     }
 
     return 0;
 }
 
+double round_to_decimal(double value, int decimal_places) {
+    const double multiplier = std::pow(10.0, decimal_places);
+    return std::round(value * multiplier) / multiplier;
+}
+
+
 // Writeout to file
 int save2file(double* d_list, string fname){
-    string fodir = "output/sep" + std::to_string(int(V0)) + "a/";
+    string fodir = "output/r=" + std::to_string(crcR) + "phi= " + std::to_string(crcPhi)+"/";
     fs::create_directories(fodir);
     ofstream myfile (fodir + fname + "-ldos.tsv");
     if (myfile.is_open()){
          // Saving info for plotting
-         myfile << "nx" << "\t" << "ny" << "\t" << "dx" << "\t" << "dy" << "\t" << "sx" << "\t" << "sy" << "\t" << "sep" << "\n";
-         myfile << nx << "\t" << ny << "\t" << dx << "\t" << dy << "\t" << shift_x << "\t" << shift_y << "\t" << sep << "\n\n";
+         myfile << "nx" << "\t" << "ny" << "\t" << "dx" << "\t" << "dy" << "\t" << "sx" << "\t" << "sy" << "\t" << "sep" << "\t" << "crcR" << "\t" << "crcPhi" << "\n";
+         myfile << nx << "\t" << ny << "\t" << dx << "\t" << dy << "\t" << shift_x << "\t" << shift_y << "\t" << sep << "\t" << crcR << "\t" << crcPhi<<"\n\n";
 
         for (int j = 0; j < ny; j++){
             for (int i = 0; i < nx; i++){
@@ -640,11 +684,13 @@ int main()
     //calculateGrid(output);
     //save2file(output, "condensed");
 
-    for (int i = 10; i < 11; i++){
-        int bs = bFromSep(2*i + 1);
-        //updateSep(i);
-        cout << "Calculating for V0" << i;
-        V0 = 10 *i;
+    for (int i = 1; i < 360; i++){
+        V0 = 10;
+        crcR = 2.5;
+        crcPhi = (i/361.0) * 2*M_PI;
+        cout << "Calculating for r=" << crcR << " and phi=" << crcPhi << "\n" << flush;
+        rotSep();
+        //sep=10;
         calculateGrid(output);
         save2file(output, "condensed");
     }
