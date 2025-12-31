@@ -27,13 +27,23 @@ def createPlot(folderdir):
 
     fname = folderdir + "/condensed-ldos.tsv"
 
+    # Conditions
+    fname_c1 = folderdir + "/cond1-ldos.tsv"
+    fname_c2 = folderdir + "/cond2-ldos.tsv"
+
     head = pd.read_csv(fname, sep="\t", nrows=1)
-    nx, ny, dx, dy, sx, sy, sep, crcR, crcPhi = head.iloc[0].tolist()
+    nx, ny, dx, dy, sx, sy, sep, crcR, crcPhi, sKx, sKy = head.iloc[0].tolist()
 
     print("Creating plot for r=", crcR, "and phi=", crcPhi)
 
     df = pd.read_csv(fname, sep="\t", header=None, dtype=np.double, skiprows=3)
     Z = df.to_numpy()
+
+    dfc1 = pd.read_csv(fname_c1, sep="\t", header=None, dtype=np.double, skiprows=3)
+    dfc2 = pd.read_csv(fname_c2, sep="\t", header=None, dtype=np.double, skiprows=3)
+
+    Zc1 = np.abs(np.tanh(1e4 * dfc1.to_numpy()))
+    Zc2 = np.abs(np.tanh(1e3 * dfc2.to_numpy()))
 
     a = 0.24595 #nm
     acc = 0.142
@@ -79,6 +89,18 @@ def createPlot(folderdir):
     fig.savefig(folderdir + "/0outplotSE.png")
     fig.savefig("/home/cmp/Documents/Github/QPI-Scattering/CAnalytics/output/plots/r="+ str(crcR) + "phi=" + str(crcPhi) + "-outplot.png")
 
+    fig1, ax1 = plt.subplots(figsize=(7, 7))
+
+    ax1.set_title(f"r={crcR:.4f} nm\n phi={crcPhi:.4f}")
+
+    ax1.scatter([tr_x, -tr_x], [tr_y, -tr_y], marker="x", color="m")
+    ax1.pcolormesh(X, Y, Zc1, cmap="Reds_r", alpha=(1-Zc1))
+    ax1.pcolormesh(X, Y, Zc2, cmap="Blues_r", alpha=(1-Zc2))
+    #ax1.pcolormesh(X, Y, np.abs(Zc2), cmap="Greys_r", alpha=0.5)
+    ax1.set_aspect("equal")
+    fig1.savefig(folderdir + "/0cond.png")
+    fig1.savefig("/home/cmp/Documents/Github/QPI-Scattering/CAnalytics/output/condplots/r="+ str(crcR) + "phi=" + str(crcPhi) + "-cond.png")
+
     plt.close()
 
     #plt.show()
@@ -87,6 +109,8 @@ def createPlot(folderdir):
 dirfolders = glob.glob("/home/cmp/Documents/Github/QPI-Scattering/CAnalytics/output/*")
 
 os.makedirs("/home/cmp/Documents/Github/QPI-Scattering/CAnalytics/output/plots/", exist_ok=True)
+os.makedirs("/home/cmp/Documents/Github/QPI-Scattering/CAnalytics/output/condplots/", exist_ok=True)
+
 for fd in dirfolders:
     if os.path.isdir(fd):
         createPlot(fd)

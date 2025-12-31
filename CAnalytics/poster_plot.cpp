@@ -23,8 +23,8 @@ namespace fs = std::filesystem;
 static int nx = 501;
 static int ny = 501;
 
-static double shift_x = 15;
-static double shift_y = 15;
+static double shift_x = 10;
+static double shift_y = 10;
 
 static double dx = (2*shift_x)/(nx-1);
 static double dy = (2*shift_y)/(ny-1);
@@ -70,10 +70,6 @@ double K2y = sqrt(3)/2.0 * K0;
 // Variable for rotating in circl
 double crcR = 1.0; // nm
 double crcPhi = 0.0; 
-
-// Selected Kx and Ky
-double sKx = 0;
-double sKy = 0;
 
 
 // Locations of Defects
@@ -470,8 +466,7 @@ double LDOS(int ix, int iy, double x, double y, double dKx, double dKy, string s
 
 
         // Lets return the parts seperately so we can be more efficient
-
-        return gsl_complex_arg(gsl_complex_add(gsl_complex_mul(C1, term1), gsl_complex_mul(C2, term2)));
+        return GSL_REAL(gsl_complex_add(gsl_complex_mul(C1, term1), gsl_complex_mul(C2, term2)));
     }
     else if (sblattices == "AB"){
         gsl_complex term1 = gsl_complex_add(gsl_complex_add(gsl_complex_add(gsl_complex_rect(arrRho1[iy*nx+ix], 0), \
@@ -630,10 +625,6 @@ int calculateRhos(double* d_list){
                 arrRho4[j*nx + i] = integrate_rho(4, cFI(i, dx, shift_x), cFI(j, dy, shift_y), w);
                 arrRho5[j*nx + i] = integrate_rho(5, cFI(i, dx, shift_x), cFI(j, dy, shift_y), w);
                 arrRho6[j*nx + i] = integrate_rho(6, cFI(i, dx, shift_x), cFI(j, dy, shift_y), w);
-
-                // For removing 1st order terms
-                //arrRho5[j*nx + i] = 0;
-                //arrRho6[j*nx + i] = 0;
             }
         }
 
@@ -656,12 +647,11 @@ int calculateGrid(double* d_list){
         for (int i = 0; i < nx; i++){
             for (int j = 0; j < ny; j++){
                 //vals = LDOS_Parts(i, j, cFI(i, dx, shift_x), cFI(j, dy, shift_y), K2x, K2y, "AA");
-                vals = LDOS_Parts(i, j, cFI(i, dx, shift_x), cFI(j, dy, shift_y), sKx, sKy, "AA");
-                d_list[j*nx + i] = vals[0];
-                amp_cond[j*nx + i] = vals[1];
-                phase_cond[j*nx + i] = vals[2];
+                //d_list[j*nx + i] = vals[0];
+                //amp_cond[j*nx + i] = vals[1];
+                //phase_cond[j*nx + i] = vals[2];
                 
-                //d_list[j*nx + i] = LDOS(i, j, cFI(i, dx, shift_x), cFI(j, dy, shift_y), K2x, K2y, "AB");
+                d_list[j*nx + i] = LDOS(i, j, cFI(i, dx, shift_x), cFI(j, dy, shift_y), K0, 0, "AA");
             }
         }
 
@@ -683,8 +673,8 @@ int save2file(double* d_list, string fname){
     ofstream myfile (fodir + fname + "-ldos.tsv");
     if (myfile.is_open()){
          // Saving info for plotting
-         myfile << "nx" << "\t" << "ny" << "\t" << "dx" << "\t" << "dy" << "\t" << "sx" << "\t" << "sy" << "\t" << "sep" << "\t" << "crcR" << "\t" << "crcPhi" << "\t" << "sKx"<< "\t" << "sKy"<< "\n";
-         myfile << nx << "\t" << ny << "\t" << dx << "\t" << dy << "\t" << shift_x << "\t" << shift_y << "\t" << sep << "\t" << crcR << "\t" << crcPhi<< "\t" << sKx << "\t" << sKy << "\n\n";
+         myfile << "nx" << "\t" << "ny" << "\t" << "dx" << "\t" << "dy" << "\t" << "sx" << "\t" << "sy" << "\t" << "sep" << "\t" << "crcR" << "\t" << "crcPhi" << "\n";
+         myfile << nx << "\t" << ny << "\t" << dx << "\t" << dy << "\t" << shift_x << "\t" << shift_y << "\t" << sep << "\t" << crcR << "\t" << crcPhi<<"\n\n";
 
         for (int j = 0; j < ny; j++){
             for (int i = 0; i < nx; i++){
@@ -732,18 +722,16 @@ int main()
 
     for (int i = 1; i < 2; i++){
         V0 = 60;
-        crcR = 3.0;
+        crcR = 2.5;
         crcPhi = 0.0;
-        sKx = K2x;
-        sKy = K2y;
         cout << "Calculating for r=" << crcR << " and phi=" << crcPhi << "\n" << flush;
         rotSep();
         //sep=10;
         calculateRhos(output);
         calculateGrid(output);
         save2file(output, "condensed");
-        save2file(amp_cond, "cond1");
-        save2file(phase_cond, "cond2");
+        //save2file(amp_cond, "cond1");
+        //save2file(phase_cond, "cond2");
     }
 
      
